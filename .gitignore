@@ -1,5 +1,9 @@
 # Environment & secrets
 .env
+.zepp-login.local.json
+.zepp-session.local.json
+.zepp-exporter.local.yaml
+.zepp-exporter.local.yaml.*.tmp
 config.yaml
 !ble-scale-sync-addon/config.yaml
 config.yaml.bak
@@ -45,6 +49,7 @@ docker-compose.override.yml
 
 # Strava tokens (should not be committed)
 strava-tokens/
+zepp-tokens/
 
 # Data files
 *.csv

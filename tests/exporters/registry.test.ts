@@ -19,8 +19,8 @@ import type { ExporterEntry } from '../../src/config/schema.js';
 // ─── EXPORTER_REGISTRY ─────────────────────────────────────────────────────
 
 describe('EXPORTER_REGISTRY', () => {
-  it('contains 11 exporter entries', () => {
-    expect(EXPORTER_REGISTRY).toHaveLength(11);
+  it('contains 12 exporter entries', () => {
+    expect(EXPORTER_REGISTRY).toHaveLength(12);
   });
 
   it('has entries for all known exporters', () => {
@@ -36,6 +36,7 @@ describe('EXPORTER_REGISTRY', () => {
     expect(names).toContain('intervals');
     expect(names).toContain('runalyze');
     expect(names).toContain('wger');
+    expect(names).toContain('zepp');
   });
 
   it('each entry has a schema and factory', () => {
@@ -54,7 +55,7 @@ describe('EXPORTER_REGISTRY', () => {
 
 describe('EXPORTER_SCHEMAS', () => {
   it('derives 11 schemas from registry', () => {
-    expect(EXPORTER_SCHEMAS).toHaveLength(11);
+    expect(EXPORTER_SCHEMAS).toHaveLength(12);
   });
 
   it('each schema has required fields', () => {
@@ -214,9 +215,9 @@ describe('EXPORTER_SCHEMAS', () => {
 // ─── KNOWN_EXPORTER_NAMES ──────────────────────────────────────────────────
 
 describe('KNOWN_EXPORTER_NAMES', () => {
-  it('is a Set with 11 entries', () => {
+  it('is a Set with 12 entries', () => {
     expect(KNOWN_EXPORTER_NAMES).toBeInstanceOf(Set);
-    expect(KNOWN_EXPORTER_NAMES.size).toBe(11);
+    expect(KNOWN_EXPORTER_NAMES.size).toBe(12);
   });
 
   it('contains all exporter names', () => {
@@ -231,6 +232,7 @@ describe('KNOWN_EXPORTER_NAMES', () => {
     expect(KNOWN_EXPORTER_NAMES.has('intervals')).toBe(true);
     expect(KNOWN_EXPORTER_NAMES.has('runalyze')).toBe(true);
     expect(KNOWN_EXPORTER_NAMES.has('wger')).toBe(true);
+    expect(KNOWN_EXPORTER_NAMES.has('zepp')).toBe(true);
   });
 });
 

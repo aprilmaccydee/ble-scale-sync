@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { isLoopback } from '../ble/loopback.js';
 import { isValidScaleId, SCALE_ID_HINT } from '../ble/scale-id.js';
+import { ZeppConfigSchema } from '../exporters/zepp-config.js';
 
 // --- Sub-schemas ---
 
@@ -235,7 +236,16 @@ export const ExporterEntrySchema = z
   .object({
     type: z.string().min(1, 'Exporter type is required'),
   })
-  .passthrough();
+  .passthrough()
+  .superRefine((entry, ctx) => {
+    if (entry.type !== 'zepp') return;
+    const result = ZeppConfigSchema.safeParse(entry);
+    if (!result.success) {
+      for (const issue of result.error.issues) {
+        ctx.addIssue({ code: 'custom', path: issue.path, message: `Zepp: ${issue.message}` });
+      }
+    }
+  });
 
 const WeightRangeSchema = z
   .object({

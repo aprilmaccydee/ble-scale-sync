@@ -192,6 +192,7 @@ describe('processReading: single-user', () => {
       userName: 'Dad',
       userSlug: 'dad',
       userConfig: dad,
+      userProfile: expect.objectContaining({ height: 183, gender: 'male' }),
       weightUnit: 'kg',
     });
   });

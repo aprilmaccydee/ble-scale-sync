@@ -99,6 +99,16 @@ users:
     #   - type: intervals
     #     athlete_id: i123456                # Intervals.icu Settings → Developer
     #     api_key: "${INTERVALS_API_KEY}"
+    #   - type: zepp                      # Experimental: see docs/guide/zepp.md
+    #     username: "alice@example.com"
+    #     password: ""                    # Fill before enabling; automatic login/renewal
+    #     country_code: GB
+    #     token_dir: ./zepp-tokens         # Persist this directory in Docker
+    #     member_id: "-1"                 # Account owner; separate account per person
+    #     device_source: 104              # Amazfit Smart Scale A2003
+    #     device_id: "AA:BB:CC:DD:EE:FF"   # Your scale's Bluetooth MAC
+    #     time_zone: Europe/London
+    #     upload_mode: full              # Or weight_impedance (no calculated metrics)
 
   - name: Bob
     slug: bob

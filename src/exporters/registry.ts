@@ -24,6 +24,8 @@ import { telegramSchema, TelegramExporter } from './telegram.js';
 import { intervalsSchema, IntervalsExporter } from './intervals.js';
 import { runalyzeSchema, RunalyzeExporter } from './runalyze.js';
 import { wgerSchema, WgerExporter } from './wger.js';
+import { zeppSchema, ZeppExporter } from './zepp.js';
+import { parseZeppConfig } from './zepp-config.js';
 
 // --- Registry entry type ---
 
@@ -50,6 +52,10 @@ function requireField(config: Record<string, unknown>, type: string, key: string
 // --- Registry ---
 
 export const EXPORTER_REGISTRY: ExporterRegistryEntry[] = [
+  {
+    schema: zeppSchema,
+    factory: (config) => new ZeppExporter(parseZeppConfig(config)),
+  },
   {
     schema: garminSchema,
     factory: (config) =>

@@ -9,7 +9,7 @@ head:
 
 # Exporters
 
-BLE Scale Sync exports body composition data to 11 targets. The [setup wizard](/guide/configuration#setup-wizard-recommended) walks you through exporter selection, configuration, and connectivity testing.
+BLE Scale Sync exports body composition data to 12 targets. The [setup wizard](/guide/configuration#setup-wizard-recommended) walks you through exporter selection, configuration, and connectivity testing.
 
 Exporters are configured in `global_exporters` (shared by all users). For multi-user setups with separate accounts, see [Per-User Exporters](/multi-user#per-user-exporters). All enabled exporters run in parallel; the process reports an error only if **every** exporter fails.
 
@@ -26,6 +26,7 @@ Exporters are configured in `global_exporters` (shared by all users). For multi-
 | [**Intervals.icu**](#intervals) | Push weight + body fat to Intervals.icu wellness       |
 | [**Runalyze**](#runalyze)       | Push weight + body composition to Runalyze metrics     |
 | [**Wger**](#wger)               | Push weight + body composition to a Wger instance      |
+| [**Zepp**](/guide/zepp)         | Upload weight + composition to Zepp (experimental)     |
 
 ## Garmin Connect {#garmin}
 

@@ -95,6 +95,19 @@ export function loadEnvConfig(): AppConfig {
         sync_measurements: w.syncMeasurements,
       });
     }
+    if (name === 'zepp' && exporterConfig.zepp) {
+      const z = exporterConfig.zepp;
+      Object.assign(entry, {
+        ...(z.credentials ? z.credentials : { app_token: z.appToken, user_id: z.userId }),
+        token_dir: z.tokenDir,
+        member_id: z.memberId,
+        base_url: z.baseUrl,
+        device_id: z.deviceId,
+        device_source: z.deviceSource,
+        time_zone: z.timeZone,
+        upload_mode: z.uploadMode,
+      });
+    }
 
     return entry as ExporterEntry;
   });

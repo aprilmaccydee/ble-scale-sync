@@ -1,0 +1,36 @@
+version: 1
+scale:
+  weight_unit: kg
+  height_unit: cm
+users:
+  - name: First
+    slug: first
+    height: 180
+    birth_date: "1991-01-01"
+    gender: male
+    is_athlete: false
+    weight_range: {min: 70, max: 90}
+    exporters:
+      - type: zepp
+        app_token: first-test-token
+        user_id: "90071992547409931"
+        member_id: "-1"
+        base_url: https://api-mifit-de.zepp.com
+        device_source: 104
+        device_id: "AA:BB:CC:DD:EE:FF"
+        time_zone: Europe/London
+  - name: Second
+    slug: second
+    height: 175
+    birth_date: "1992-01-01"
+    gender: female
+    is_athlete: false
+    weight_range: {min: 90, max: 110}
+    exporters:
+      - type: zepp
+        app_token: second-test-token
+        user_id: "90071992547409932"
+        member_id: "-1"
+        time_zone: Europe/London
+runtime:
+  dry_run: true

@@ -195,6 +195,7 @@ async function processReadingFrames(
       userName: user.name,
       userSlug: user.slug,
       userConfig: user,
+      userProfile: profile,
       weightUnit: ctx.weightUnit,
       ...(policy.drift && isLast ? { driftWarning: policy.drift } : {}),
       ...(reading.timestamp ? { timestamp: reading.timestamp } : {}),

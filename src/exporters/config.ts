@@ -1,4 +1,5 @@
 import { createLogger } from '../logger.js';
+import { parseZeppConfig, type ZeppConfig } from './zepp-config.js';
 
 const log = createLogger('ExporterConfig');
 
@@ -13,7 +14,8 @@ export type ExporterName =
   | 'telegram'
   | 'intervals'
   | 'runalyze'
-  | 'wger';
+  | 'wger'
+  | 'zepp';
 
 const KNOWN_EXPORTERS = new Set<ExporterName>([
   'garmin',
@@ -27,6 +29,7 @@ const KNOWN_EXPORTERS = new Set<ExporterName>([
   'intervals',
   'runalyze',
   'wger',
+  'zepp',
 ]);
 
 export interface MqttConfig {
@@ -114,6 +117,7 @@ export interface ExporterConfig {
   intervals?: IntervalsConfig;
   runalyze?: RunalyzeConfig;
   wger?: WgerConfig;
+  zepp?: ZeppConfig;
 }
 
 function fail(msg: string): never {
@@ -372,5 +376,24 @@ export function loadExporterConfig(): ExporterConfig {
     intervals,
     runalyze,
     wger,
+    zepp: exporters.includes('zepp')
+      ? parseZeppConfig({
+          username: process.env.ZEPP_USERNAME,
+          password: process.env.ZEPP_PASSWORD,
+          country_code: process.env.ZEPP_COUNTRY_CODE,
+          token_dir: process.env.ZEPP_TOKEN_DIR,
+          app_token: process.env.ZEPP_APP_TOKEN,
+          user_id: process.env.ZEPP_USER_ID,
+          member_id: process.env.ZEPP_MEMBER_ID,
+          base_url: process.env.ZEPP_BASE_URL,
+          device_id: process.env.ZEPP_DEVICE_ID,
+          device_source:
+            process.env.ZEPP_DEVICE_SOURCE === undefined
+              ? undefined
+              : Number(process.env.ZEPP_DEVICE_SOURCE),
+          time_zone: process.env.ZEPP_TIME_ZONE,
+          upload_mode: process.env.ZEPP_UPLOAD_MODE,
+        })
+      : undefined,
   };
 }

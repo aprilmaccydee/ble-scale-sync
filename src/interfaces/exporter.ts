@@ -1,4 +1,4 @@
-import type { BodyComposition } from './scale-adapter.js';
+import type { BodyComposition, UserProfile } from './scale-adapter.js';
 import type { UserConfig, WeightUnit } from '../config/schema.js';
 
 export interface ExportResult {
@@ -16,6 +16,8 @@ export interface ExportContext {
   userName?: string;
   userSlug?: string;
   userConfig?: UserConfig;
+  /** Resolved demographics used for this calculation; height is always centimetres. */
+  userProfile?: UserProfile;
   driftWarning?: string;
   /** Display unit for weight-valued fields (`scale.weight_unit`); values stay in kg. */
   weightUnit?: WeightUnit;

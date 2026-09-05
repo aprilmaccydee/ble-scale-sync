@@ -11,6 +11,7 @@ import { TelegramExporter } from './telegram.js';
 import { IntervalsExporter } from './intervals.js';
 import { RunalyzeExporter } from './runalyze.js';
 import { WgerExporter } from './wger.js';
+import { ZeppExporter } from './zepp.js';
 
 export { loadExporterConfig } from './config.js';
 export { createExporterFromEntry, EXPORTER_SCHEMAS, KNOWN_EXPORTER_NAMES } from './registry.js';
@@ -52,6 +53,9 @@ export function createExporters(config: ExporterConfig): Exporter[] {
         break;
       case 'wger':
         exporters.push(new WgerExporter(config.wger!));
+        break;
+      case 'zepp':
+        exporters.push(new ZeppExporter(config.zepp!));
         break;
       default: {
         const _exhaustive: never = name;

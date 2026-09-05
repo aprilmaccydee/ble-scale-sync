@@ -1,6 +1,7 @@
 import type { UserProfile } from '../interfaces/scale-adapter.js';
 import type { BleHandlerName } from '../ble/types.js';
 import { validateProfiles, type AmazfitProfile } from '../scales/amazfit/profiles.js';
+import { isZeppPlaceholder } from '../exporters/zepp-config.js';
 import type {
   AppConfig,
   UserConfig,
@@ -171,7 +172,7 @@ export function resolveExportersForUser(config: AppConfig, user: UserConfig): Ex
     }
   }
 
-  return entries;
+  return entries.filter((entry) => !isZeppPlaceholder(entry));
 }
 
 // --- Convenience: single-user resolution ---
