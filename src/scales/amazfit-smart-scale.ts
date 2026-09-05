@@ -42,12 +42,13 @@ const IMPEDANCE_MAX = 1500;
  * custom-components/ble_monitor#910 and its shipped parser
  * (`ble_parser/amazfit.py`), cross-checked against a capture from this project:
  *
- *   [0]      control byte (0xba / 0xbb on completed measurements, 0x0a / 0x8a
- *            on idle and weight-only frames; not decoded)
+ *   [0]      control byte: bit 0 set when the scale is in pounds (0xbb vs
+ *            0xba on completed measurements, 0x0a / 0x8a on idle and
+ *            weight-only frames); the other bits are not decoded
  *   [1]      flags, not decoded
  *   [2-4]    unknown (looks like a counter or timestamp)
  *   [5-6]    impedance x10, uint16 LE. See IMPEDANCE_MIN / IMPEDANCE_MAX.
- *   [7-8]    weight x200, uint16 LE, always kg regardless of display unit
+ *   [7-8]    weight, uint16 LE: x200 in kg mode, x100 in lb mode
  *   [9-11]   all zero until the measurement has completed with impedance
  *   [12]     pulse, bpm (0 when not measured; not exported)
  *   [13]     unknown
@@ -62,6 +63,12 @@ const IMPEDANCE_MAX = 1500;
  * ble_monitor's fixture: `ba82e6c7fc3414a442bf46ec68000462bba30100` is
  * 85.3 kg, 517.2 ohm, 104 bpm; the same person's Xiaomi Mi Scale 2 read
  * 514 ohm, which is what makes the impedance decode credible.
+ *
+ * The pound flag is from this project: a scale set to lb produced
+ * `bb82ea270bd0284c5ef046ee4a00ffffffffffff` for a person the display showed
+ * at 109 kg. Read as kg x200 that is 120.7 kg; read as lb x100 it is
+ * 241.4 lb = 109.5 kg. ble_monitor only ever saw kg-mode frames, so it has no
+ * such flag.
  */
 export class AmazfitSmartScaleAdapter implements ScaleAdapterCore, BroadcastSource {
   readonly name = 'Amazfit Smart Scale';
@@ -95,7 +102,9 @@ export class AmazfitSmartScaleAdapter implements ScaleAdapterCore, BroadcastSour
   parseServiceData(uuid: string, data: Buffer): ScaleReading | null {
     if (normalizeServiceUuid(uuid) !== SVC_HUAMI || data.length !== FRAME_LENGTH) return null;
 
-    const weight = data.readUInt16LE(7) / 200;
+    const isLbs = (data[0] & 0x01) !== 0;
+    const rawWeight = data.readUInt16LE(7);
+    const weight = isLbs ? (rawWeight / 100) * 0.45359237 : rawWeight / 200;
     const measured = data[9] !== 0 || data[10] !== 0 || data[11] !== 0;
 
     if (!measured || weight < WEIGHT_MIN) {
@@ -110,10 +119,13 @@ export class AmazfitSmartScaleAdapter implements ScaleAdapterCore, BroadcastSour
       rawImpedance >= IMPEDANCE_MIN && rawImpedance <= IMPEDANCE_MAX ? rawImpedance : 0;
     const pulse = data[12];
 
-    bleLog.debug(
-      `Amazfit measurement: ${weight.toFixed(2)} kg, impedance ${rawImpedance.toFixed(1)} ohm` +
-        `${impedance === 0 ? ' (out of range, using BMI estimate)' : ''}, pulse ${pulse} bpm, ` +
-        `user bytes ${data.subarray(14, 20).toString('hex')}`,
+    // Info, not debug: the frame layout is only partly verified, and the raw
+    // hex next to the decode is what lets a wrong reading be diagnosed from a
+    // normal log instead of a debug capture of every advertisement in range.
+    bleLog.info(
+      `Amazfit frame ${data.toString('hex')}: ${weight.toFixed(2)} kg (${isLbs ? 'lb' : 'kg'} mode), ` +
+        `impedance ${rawImpedance.toFixed(1)} ohm${impedance === 0 ? ' (out of range, using BMI estimate)' : ''}, ` +
+        `pulse ${pulse} bpm, user bytes ${data.subarray(14, 20).toString('hex')}`,
     );
 
     return { weight, impedance };

@@ -8,8 +8,9 @@ const HUAMI_MANUFACTURER = { id: 0x0157, data: Buffer.from('70879eb52fa4', 'hex'
 
 // custom-components/ble_monitor#910 fixture: 85.3 kg, 517.2 ohm, 104 bpm.
 const BLE_MONITOR_FRAME = Buffer.from('ba82e6c7fc3414a442bf46ec68000462bba30100', 'hex');
-// Captured through an ESPHome proxy in this project: 120.7 kg, 1044.8 ohm, 74 bpm,
-// user slot bytes all 0xff (scale matched nobody).
+// Captured through an ESPHome proxy in this project from a scale set to lb:
+// 241.4 lb (the display showed 109 kg), 1044.8 ohm, 74 bpm, user slot bytes
+// all 0xff (scale matched nobody).
 const PROXY_FRAME = Buffer.from('bb82ea270bd0284c5ef046ee4a00ffffffffffff', 'hex');
 // Same issue: a weight-only weigh-in (84.05 kg) with bytes 9-11 zero.
 const WEIGHT_ONLY_FRAME = Buffer.from('0a00e6c7fab3d9aa410000000000000000000000', 'hex');
@@ -63,11 +64,18 @@ describe('AmazfitSmartScaleAdapter', () => {
     expect(adapter.isComplete(reading!)).toBe(true);
   });
 
-  it('decodes the proxy capture and accepts its full 128-bit service uuid', () => {
-    expect(adapter.parseServiceData('0000fee000001000800000805f9b34fb', PROXY_FRAME)).toEqual({
-      weight: 120.7,
-      impedance: 1044.8,
-    });
+  it('converts a pound-mode frame to kg and accepts the full 128-bit service uuid', () => {
+    const reading = adapter.parseServiceData('0000fee000001000800000805f9b34fb', PROXY_FRAME);
+
+    expect(reading?.weight).toBeCloseTo(109.497, 3);
+    expect(reading?.impedance).toBe(1044.8);
+  });
+
+  it('reads the same raw weight as kg when the pound bit is clear', () => {
+    const frame = Buffer.from(PROXY_FRAME);
+    frame[0] &= ~0x01;
+
+    expect(adapter.parseServiceData('fee0', frame)).toEqual({ weight: 120.7, impedance: 1044.8 });
   });
 
   it('drops frames whose measurement has not completed', () => {
