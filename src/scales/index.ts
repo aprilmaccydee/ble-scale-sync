@@ -5,6 +5,7 @@ import { RenphoEs26bbAdapter } from './renpho-es26bb.js';
 import { RenphoMsc04Adapter } from './renpho-msc04.js';
 import { MiScale2Adapter } from './mi-scale-2.js';
 import { XiaomiMiScaleLegacyAdapter } from './xiaomi-mi-scale-legacy.js';
+import { AmazfitSmartScaleAdapter } from './amazfit-smart-scale.js';
 import { Silvergear108Adapter } from './silvergear-108.js';
 import { XiaomiS800Adapter } from './xiaomi-s800.js';
 import { BeurerBf720Adapter } from './beurer-bf720.js';
@@ -57,6 +58,9 @@ export const adapters: ScaleAdapter[] = [
   // XMTZC04HM is a distinct, weight-only 0x181D broadcast protocol. It must
   // resolve before MiScale2Adapter and StandardGattScaleAdapter.
   new XiaomiMiScaleLegacyAdapter(),
+  // Amazfit Smart Scale: broadcast-only 20-byte frame on the Huami vendor
+  // service 0xFEE0, which no other adapter claims (ble_monitor#910).
+  new AmazfitSmartScaleAdapter(),
   // Silvergear 108: broadcast-only, non-connectable. Claims on the invented
   // company id 0xA0AC plus the exact 12-byte payload and its checksum, so it
   // cannot collide with anything else (#297).

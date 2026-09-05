@@ -41,6 +41,15 @@ const FIXTURES: Record<string, BleDeviceInfo> = {
     manufacturerData: { id: 0x0157, data: Buffer.from('70879eede5e7', 'hex') },
     serviceData: [{ uuid: '181d', data: Buffer.from('238e4eea070818103913', 'hex') }],
   },
+  // Broadcast-only 20-byte frame on the Huami vendor service 0xFEE0. The name
+  // arrives in a separate scan-response frame, so the fixture is nameless.
+  'Amazfit Smart Scale': {
+    localName: '',
+    serviceUuids: ['fee0'],
+    serviceData: [
+      { uuid: 'fee0', data: Buffer.from('bb82ea270bd0284c5ef046ee4a00ffffffffffff', 'hex') },
+    ],
+  },
   // Broadcast-only, non-connectable. Claims on the invented company id 0xA0AC
   // plus the exact 12-byte payload and its checksum; the name "108" is ignored.
   'Silvergear Smart Scale 108': {
