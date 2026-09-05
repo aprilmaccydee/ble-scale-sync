@@ -22,6 +22,8 @@ interface HaMetricDef {
   icon?: string;
   precision?: number;
   entityCategory?: string;
+  /** Discover only after a scale has supplied this optional measurement. */
+  optional?: boolean;
 }
 
 const HA_METRICS: HaMetricDef[] = [
@@ -47,12 +49,21 @@ const HA_METRICS: HaMetricDef[] = [
   },
   { key: 'bmr', name: 'BMR', unit: 'kcal', icon: 'mdi:fire' },
   { key: 'metabolicAge', name: 'Metabolic Age', unit: 'yr', icon: 'mdi:calendar-clock' },
+  {
+    key: 'heartRate',
+    name: 'Heart Rate',
+    unit: 'bpm',
+    icon: 'mdi:heart-pulse',
+    precision: 0,
+    optional: true,
+  },
 ];
 
 // Compile-time check: fails if a field is added to BodyComposition but not to HA_METRICS
 const _haKeysCheck: Record<keyof BodyComposition, true> = {
   weight: true,
   impedance: true,
+  heartRate: true,
   bmi: true,
   bodyFatPercent: true,
   waterPercent: true,
@@ -138,7 +149,11 @@ export class MqttExporter implements Exporter {
     this.config = config;
   }
 
-  private async publishDiscovery(client: MqttClient, context?: ExportContext): Promise<void> {
+  private async publishDiscovery(
+    client: MqttClient,
+    data: BodyComposition,
+    context?: ExportContext,
+  ): Promise<void> {
     const slug = context?.userSlug;
     const dataTopic = slug ? `${this.config.topic}/${slug}` : this.config.topic;
     const statusTopic = `${dataTopic}/status`;
@@ -156,13 +171,18 @@ export class MqttExporter implements Exporter {
       sw_version: pkg.version,
     };
 
-    for (const metric of HA_METRICS) {
+    const metrics = HA_METRICS.filter(
+      (metric) => !metric.optional || data[metric.key] !== undefined,
+    );
+    for (const metric of metrics) {
       const topic = `homeassistant/sensor/${deviceId}/${metric.key}/config`;
       const payload: Record<string, unknown> = {
         name: metric.name,
         unique_id: `${deviceId}_${metric.key}`,
         state_topic: dataTopic,
-        value_template: `{{ value_json.${metric.key} }}`,
+        // HA treats None as unknown for numeric sensors. An absent pulse must
+        // not leave a previous weigh-in's pulse displayed as this one's result.
+        value_template: `{{ value_json.${metric.key}${metric.optional ? ' | default(none)' : ''} }}`,
         state_class: 'measurement',
         availability: [{ topic: statusTopic }],
         device,
@@ -178,7 +198,7 @@ export class MqttExporter implements Exporter {
 
     await client.publishAsync(statusTopic, 'online', { qos: 1, retain: true });
     const suffix = slug ? ` (user: ${slug})` : '';
-    log.info(`Published HA discovery for ${HA_METRICS.length} metrics${suffix}.`);
+    log.info(`Published HA discovery for ${metrics.length} metrics${suffix}.`);
   }
 
   async healthcheck(): Promise<ExportResult> {
@@ -244,7 +264,7 @@ export class MqttExporter implements Exporter {
 
         try {
           if (haDiscovery) {
-            await this.publishDiscovery(client, context);
+            await this.publishDiscovery(client, data, context);
           }
 
           const payload = JSON.stringify(data);

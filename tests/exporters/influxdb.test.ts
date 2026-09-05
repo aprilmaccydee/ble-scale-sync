@@ -108,6 +108,19 @@ describe('InfluxDbExporter', () => {
 });
 
 describe('toLineProtocol()', () => {
+  it('includes an optional pulse only when measured', () => {
+    const timestamp = new Date('2026-09-05T14:00:00Z');
+    const original = toLineProtocol(samplePayload, 'test', undefined, timestamp);
+    const withPulse = toLineProtocol(
+      { ...samplePayload, heartRate: 70 },
+      'test',
+      undefined,
+      timestamp,
+    );
+    expect(original).not.toContain('heartRate');
+    expect(withPulse).toBe(original.replace(' 1788616800000', ',heartRate=70i 1788616800000'));
+  });
+
   it('formats float fields with 2 decimal places', () => {
     const line = toLineProtocol(samplePayload, 'test');
     expect(line).toContain('weight=80.00');

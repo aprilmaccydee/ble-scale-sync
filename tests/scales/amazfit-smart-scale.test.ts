@@ -77,7 +77,7 @@ describe('AmazfitSmartScaleAdapter', () => {
   it('decodes the ble_monitor fixture', () => {
     const reading = adapter.parseServiceData('fee0', BLE_MONITOR_FRAME);
 
-    expect(reading).toEqual({ weight: 85.3, impedance: 502 });
+    expect(reading).toEqual({ weight: 85.3, impedance: 502, heartRate: 104 });
     expect(adapter.isComplete(reading!)).toBe(true);
   });
 
@@ -92,7 +92,11 @@ describe('AmazfitSmartScaleAdapter', () => {
     const frame = Buffer.from(PROXY_FRAME);
     frame[0] &= ~0x01;
 
-    expect(adapter.parseServiceData('fee0', frame)).toEqual({ weight: 120.7, impedance: 405 });
+    expect(adapter.parseServiceData('fee0', frame)).toEqual({
+      weight: 120.7,
+      impedance: 405,
+      heartRate: 74,
+    });
   });
 
   it('drops frames whose measurement has not completed', () => {
@@ -110,6 +114,17 @@ describe('AmazfitSmartScaleAdapter', () => {
     const reading = fresh.parseServiceData('fee0', FINISHED_FRAME);
     expect(reading?.weight).toBeCloseTo(109.588, 3);
     expect(reading?.impedance).toBe(420);
+    expect(reading?.heartRate).toBe(70);
+    expect(fresh.computeMetrics(reading!, defaultProfile()).heartRate).toBe(70);
+  });
+
+  it.each(['missing flag', 'zero pulse'])('omits unavailable heart rate: %s', (reason) => {
+    const frame = Buffer.from(FINISHED_FRAME);
+    if (reason === 'missing flag') frame[0] &= ~0x20;
+    else frame[12] = 0;
+    const reading = adapter.parseServiceData('fee0', frame)!;
+    expect(reading).not.toHaveProperty('heartRate');
+    expect(adapter.computeMetrics(reading, defaultProfile())).not.toHaveProperty('heartRate');
   });
 
   it('ignores other services and frame lengths', () => {
@@ -126,6 +141,7 @@ describe('AmazfitSmartScaleAdapter', () => {
       expect(new AmazfitSmartScaleAdapter().parseServiceData('fee0', frame)).toEqual({
         weight: 85.3,
         impedance: 0,
+        heartRate: 104,
       });
     },
   );
@@ -192,7 +208,7 @@ describe('AmazfitSmartScaleAdapter', () => {
         serviceUuids: ['fee0'],
         serviceData: [{ uuid: 'fee0', data: BLE_MONITOR_FRAME }],
       }),
-    ).toEqual({ kind: 'complete', reading: { weight: 85.3, impedance: 502 } });
+    ).toEqual({ kind: 'complete', reading: { weight: 85.3, impedance: 502, heartRate: 104 } });
   });
 
   it('treats an identical frame as the scale repeating itself, not a new weigh-in', () => {

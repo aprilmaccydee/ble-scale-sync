@@ -157,7 +157,12 @@ export class AmazfitSmartScaleAdapter implements ScaleAdapterCore, BroadcastSour
     );
 
     const userSlug = flags & 0x0080 ? this.users.get(data.readUIntLE(14, 6)) : undefined;
-    return { weight, impedance, ...(userSlug ? { userSlug } : {}) };
+    return {
+      weight,
+      impedance,
+      ...(pulse > 0 ? { heartRate: pulse } : {}),
+      ...(userSlug ? { userSlug } : {}),
+    };
   }
 
   isComplete(reading: ScaleReading): boolean {
@@ -167,6 +172,9 @@ export class AmazfitSmartScaleAdapter implements ScaleAdapterCore, BroadcastSour
   computeMetrics(reading: ScaleReading, profile: UserProfile): BodyComposition {
     const fat =
       reading.impedance > 0 ? computeBiaFat(reading.weight, reading.impedance, profile) : undefined;
-    return buildPayload(reading.weight, reading.impedance, { fat }, profile);
+    return {
+      ...buildPayload(reading.weight, reading.impedance, { fat }, profile),
+      ...(reading.heartRate !== undefined ? { heartRate: reading.heartRate } : {}),
+    };
   }
 }

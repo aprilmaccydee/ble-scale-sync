@@ -23,6 +23,7 @@ const INT_FIELDS: (keyof BodyComposition)[] = [
   'physiqueRating',
   'bmr',
   'metabolicAge',
+  'heartRate',
 ];
 
 // Compile-time check: fails if a field is added to BodyComposition but not covered above
@@ -38,6 +39,7 @@ const _fieldCheck: Record<keyof BodyComposition, true> = {
   physiqueRating: true,
   bmr: true,
   metabolicAge: true,
+  heartRate: true,
 };
 void _fieldCheck;
 
@@ -81,7 +83,8 @@ export function toLineProtocol(
     fields.push(`${key}=${(data[key] as number).toFixed(2)}`);
   }
   for (const key of INT_FIELDS) {
-    fields.push(`${key}=${Math.round(data[key] as number)}i`);
+    const value = data[key];
+    if (value !== undefined) fields.push(`${key}=${Math.round(value)}i`);
   }
 
   const tsMs = (timestamp ?? new Date()).getTime();

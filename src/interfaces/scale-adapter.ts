@@ -43,6 +43,8 @@ export interface LiveWeight {
 export interface ScaleReading {
   weight: number;
   impedance: number;
+  /** Measured pulse in beats per minute, when supplied by the scale. */
+  heartRate?: number;
   /** Configured user selected by a verified on-device profile ID, when available. */
   userSlug?: string;
   /**
@@ -81,6 +83,8 @@ export interface UserProfile {
 export interface BodyComposition {
   weight: number;
   impedance: number;
+  /** Measured pulse in beats per minute; omitted when unavailable. */
+  heartRate?: number;
   bmi: number;
   bodyFatPercent: number;
   waterPercent: number;

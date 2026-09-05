@@ -70,6 +70,19 @@ take a fresh measurement. Known scale profile IDs route readings to their
 configured users; unrecognised readings use the existing weight-matching policy.
 `dry_run: true` disables profile writes and MQTT controls as well as exports.
 
+## Heart rate in Home Assistant
+
+Completed measurements with the pulse-present flag and a nonzero pulse include
+`heartRate` (bpm) in the MQTT payload on each user's normal measurement topic.
+With MQTT discovery enabled, the first such reading creates a **Heart Rate**
+sensor under that user's existing BLE Scale device. No config change is needed.
+
+A weight-only reading omits `heartRate`. The discovery template converts its
+absence to Home Assistant's numeric `unknown` state, so an old pulse is not
+presented as part of a new reading. This uses Home Assistant's documented
+[MQTT sensor missing-value behavior](https://www.home-assistant.io/integrations/sensor.mqtt/#state_topic).
+The value comes from the scale, not the body-composition calculation.
+
 ## MQTT reset button
 
 With a global MQTT exporter configured, the service maintains a separate control

@@ -138,6 +138,40 @@ describe('MqttExporter', () => {
   });
 
   describe('Home Assistant discovery', () => {
+    it('publishes a measured pulse to the correct user and discovers a bpm sensor', async () => {
+      const exporter = new MqttExporter({ ...defaultConfig, haDiscovery: true });
+      const data = { ...samplePayload, heartRate: 70 };
+      await exporter.export(data, { userSlug: 'alice', userName: 'Alice' });
+      expect(mockPublishAsync).toHaveBeenCalledWith(
+        'scale/body-composition/alice',
+        JSON.stringify(data),
+        { qos: 1, retain: true },
+      );
+      const discovery = mockPublishAsync.mock.calls.find(
+        ([topic]) => topic === 'homeassistant/sensor/ble-scale-sync-alice/heartRate/config',
+      );
+      expect(discovery?.[2]).toEqual({ qos: 1, retain: true });
+      expect(JSON.parse(discovery![1])).toMatchObject({
+        name: 'Heart Rate',
+        unique_id: 'ble-scale-sync-alice_heartRate',
+        state_topic: 'scale/body-composition/alice',
+        unit_of_measurement: 'bpm',
+        state_class: 'measurement',
+        value_template: '{{ value_json.heartRate | default(none) }}',
+        suggested_display_precision: 0,
+        device: { identifiers: ['ble-scale-sync-alice'] },
+      });
+
+      mockPublishAsync.mockClear();
+      await exporter.export(samplePayload, { userSlug: 'alice', userName: 'Alice' });
+      expect(mockPublishAsync.mock.calls.some(([topic]) => topic.includes('/heartRate/'))).toBe(
+        false,
+      );
+      // Keep the earlier retained discovery: its default(none) clears the
+      // unavailable pulse when the following weight-only payload arrives.
+      expect(JSON.parse(mockPublishAsync.mock.calls.at(-1)![1])).not.toHaveProperty('heartRate');
+    });
+
     it('publishes discovery payloads + status + data when haDiscovery is true', async () => {
       const config: MqttConfig = { ...defaultConfig, haDiscovery: true };
       const exporter = new MqttExporter(config);
