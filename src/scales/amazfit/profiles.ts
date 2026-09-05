@@ -5,6 +5,8 @@ export interface AmazfitProfile {
   id: number;
   slug: string;
   name: string;
+  /** Optional Zepp avatar index. Omission keeps the existing profile encoding (0). */
+  avatarId?: number;
   profile: UserProfile;
 }
 
@@ -94,6 +96,10 @@ export function nameBitmap(name: string, width: number, height: number, scale: n
 /** Zepp v411.I0: avatar, sex, height, kg x100, normal mode, birth year/month. */
 export function profileRecord(user: AmazfitProfile): Buffer {
   const p = user.profile;
+  const avatarId = user.avatarId ?? 0;
+  if (!Number.isInteger(avatarId) || avatarId < 0 || avatarId > 8) {
+    throw new Error('Amazfit avatar ID must be an integer from 0 to 8');
+  }
   const birth = new Date(`${p.birthDate}T00:00:00Z`);
   if (
     !p.birthDate ||
@@ -113,6 +119,7 @@ export function profileRecord(user: AmazfitProfile): Buffer {
   }
   if (p.isAthlete) throw new Error('Amazfit provisioning supports the verified normal mode only');
   const fixed = Buffer.alloc(9);
+  fixed[0] = avatarId;
   fixed[1] = p.gender === 'male' ? 1 : 0;
   fixed[2] = height;
   fixed.writeUInt16LE(Math.round(weight * 100), 3);
@@ -147,6 +154,7 @@ export function profileFingerprint(users: AmazfitProfile[]): string {
         id: u.id,
         slug: u.slug,
         name: u.name,
+        avatarId: u.avatarId ?? 0,
         height: u.profile.height,
         birthDate: u.profile.birthDate,
         gender: u.profile.gender,

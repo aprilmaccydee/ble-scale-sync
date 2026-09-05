@@ -77,12 +77,18 @@ export function resolveUserProfile(user: UserConfig, scaleConfig: ScaleConfig): 
 
 /** Called after environment overrides, including SCALE_MAC / CONTINUOUS_MODE. */
 export function resolveAmazfitProfiles(config: AppConfig): AmazfitProfile[] {
+  if (
+    config.users.some((u) => u.amazfit_avatar_id !== undefined && u.amazfit_user_id === undefined)
+  ) {
+    throw new Error('amazfit_avatar_id requires amazfit_user_id on the same user');
+  }
   const users = config.users
     .filter((u) => u.amazfit_user_id !== undefined)
     .map((u) => ({
       id: u.amazfit_user_id!,
       slug: u.slug,
       name: u.name,
+      avatarId: u.amazfit_avatar_id,
       profile: resolveUserProfile(u, config.scale),
     }));
   if (!users.length) return users;

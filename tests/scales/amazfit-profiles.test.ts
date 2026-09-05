@@ -78,6 +78,28 @@ describe('Amazfit profile provisioning', () => {
     expect(device.writes.some((c) => c[1] === 7)).toBe(false);
   });
 
+  it('only changes the avatar byte when explicitly configured, preserving both name bitmaps', async () => {
+    const original = profileRecord(user);
+    expect(profileRecord({ ...user, avatarId: 0 })).toEqual(original);
+    const device = scale([1]);
+    await provisionProfiles(device, [{ ...user, avatarId: 8 }]);
+    const record = device.writes.find((command) => command[1] === 3)!;
+    expect(record[14]).toBe(8);
+    record[14] = 0;
+    expect(record).toEqual(original);
+    expect(profileFingerprint([user])).toBe(profileFingerprint([{ ...user, avatarId: 0 }]));
+    expect(profileFingerprint([user])).not.toBe(profileFingerprint([{ ...user, avatarId: 8 }]));
+  });
+
+  it.each([-1, 9, 1.5, NaN])(
+    'rejects invalid avatar %s before contacting the scale',
+    async (avatarId) => {
+      const device = scale([1]);
+      await expect(provisionProfiles(device, [{ ...user, avatarId }])).rejects.toThrow('avatar ID');
+      expect(device.writes).toHaveLength(0);
+    },
+  );
+
   it('verifies account removal before recreation and never deletes newly created accounts on retry', async () => {
     const device = scale([1, 9, 2]);
     const reset = { removed: new Set<number>(), removalVerified: false };
@@ -150,6 +172,21 @@ describe('Amazfit profile provisioning', () => {
       ],
     });
     expect(resolveAmazfitProfiles(config)[0].profile.lastKnownWeight).toBe(70);
+    expect(resolveAmazfitProfiles(config)[0].avatarId).toBeUndefined();
+    const avatarConfig = AppConfigSchema.parse({
+      ...config,
+      users: [{ ...config.users[0], amazfit_avatar_id: '8' }],
+    });
+    expect(resolveAmazfitProfiles(avatarConfig)[0].avatarId).toBe(8);
+    expect(() =>
+      AppConfigSchema.parse({ ...config, users: [{ ...config.users[0], amazfit_avatar_id: 9 }] }),
+    ).toThrow();
+    expect(() =>
+      resolveAmazfitProfiles({
+        ...avatarConfig,
+        users: [{ ...avatarConfig.users[0], amazfit_user_id: undefined }],
+      }),
+    ).toThrow('amazfit_avatar_id requires amazfit_user_id');
     expect(() =>
       resolveAmazfitProfiles({ ...config, ble: { ...config.ble!, scale_mac: undefined } }),
     ).toThrow('scale_mac');

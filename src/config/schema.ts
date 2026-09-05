@@ -260,6 +260,8 @@ export const UserSchema = z.object({
   exporters: z.array(ExporterEntrySchema).optional(),
   /** Stable local A2003 account/member ID. Setting this enables app-free provisioning. */
   amazfit_user_id: z.coerce.number().int().min(1).max(0xfffffffffffe).optional(),
+  /** Optional Zepp avatar index; omit to retain the existing profile display. */
+  amazfit_avatar_id: z.coerce.number().int().min(0).max(8).optional(),
   // Beurer SIG-standard scales (BF720 / BF105) gate measurements behind a
   // User Control Point consent code. Obtain it once by pairing the scale with
   // the Beurer / openScale app (or read it off the scale's control unit), then

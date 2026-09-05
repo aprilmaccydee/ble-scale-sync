@@ -51,6 +51,14 @@ to 90–220 cm and weight to 10–180 kg. The weight reference comes from
 `last_known_weight`, falling back to the midpoint of `weight_range`. Only the
 verified normal measurement mode is supported (`is_athlete: false`).
 
+An optional per-user `amazfit_avatar_id` accepts Zepp's built-in indexes 0–8.
+Leave it absent to keep the existing profile display: the encoded avatar byte
+remains 0 and both name bitmaps are unchanged. A nonzero value is an explicit
+opt-in and schedules a profile update. No avatar is selected automatically, and
+the setup example above deliberately leaves this setting absent. The indexes
+come from Zepp's `avatar_of_scale_res_id` resource array; nonzero avatars have
+not been tested on the scale. No images from Zepp are bundled with the service.
+
 On startup and after profile details change, the service waits for the scale to
 wake and the person to step off, then registers accounts and writes the profiles.
 Every write must be acknowledged and the final account list must read back
@@ -111,6 +119,8 @@ Source references for Zepp 10.8.1:
 - ARM64 `libhtBodyfatBia4TwoLegs.so`, exported `impedanceDecode`, address `0x4780`:
   encoded impedance calculation.
 - `v411.I0/i1/s1/U0`: profile record, member roster, registered account write/read.
+- `ug31.N3()` and `avatar_of_scale_res_id`: avatar indexes 0–8;
+  `v411.I0()` writes the avatar byte after the two six-byte IDs.
 - `goz.unbindSync()` → `v411.O0()`: account unbind, module 32, `01 07 + accountLE6`.
 - `zzc/n1d/i3v`: plaintext Huami channel v1, fragmentation and acknowledgements.
 
