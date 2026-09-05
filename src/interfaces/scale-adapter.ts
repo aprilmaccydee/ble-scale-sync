@@ -45,6 +45,8 @@ export interface ScaleReading {
   impedance: number;
   /** Measured pulse in beats per minute, when supplied by the scale. */
   heartRate?: number;
+  /** Raw stress score supplied by the scale; omitted when unavailable. */
+  stress?: number;
   /** Configured user selected by a verified on-device profile ID, when available. */
   userSlug?: string;
   /**
@@ -85,6 +87,8 @@ export interface BodyComposition {
   impedance: number;
   /** Measured pulse in beats per minute; omitted when unavailable. */
   heartRate?: number;
+  /** Raw stress score supplied by the scale; omitted when unavailable. */
+  stress?: number;
   bmi: number;
   bodyFatPercent: number;
   waterPercent: number;

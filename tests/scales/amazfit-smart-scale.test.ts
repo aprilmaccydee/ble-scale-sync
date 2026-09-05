@@ -277,4 +277,17 @@ describe('AmazfitSmartScaleAdapter', () => {
     frame.fill(0xff, 14);
     expect(adapter.parseServiceData('fee0', frame)?.userSlug).toBeUndefined();
   });
+  it('exports the hardware-verified stress score and preserves flagged zero', () => {
+    const frame = Buffer.from('fb83ea274b746050557326205d27010000000000', 'hex');
+    const reading = adapter.parseServiceData('fee0', frame)!;
+    expect(reading).toMatchObject({ stress: 39, heartRate: 93, impedance: 553 });
+    expect(adapter.computeMetrics(reading, defaultProfile()).stress).toBe(39);
+    frame[13] = 0;
+    expect(new AmazfitSmartScaleAdapter().parseServiceData('fee0', frame)?.stress).toBe(0);
+    frame[0] &= ~0x40;
+    frame[13] = 39;
+    const noStress = new AmazfitSmartScaleAdapter().parseServiceData('fee0', frame)!;
+    expect(noStress).not.toHaveProperty('stress');
+    expect(adapter.computeMetrics(noStress, defaultProfile())).not.toHaveProperty('stress');
+  });
 });

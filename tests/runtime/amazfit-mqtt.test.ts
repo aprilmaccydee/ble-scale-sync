@@ -14,6 +14,7 @@ class Client extends EventEmitter {
 let client: Client;
 let control: InstanceType<typeof AmazfitMqttControl>;
 const reset = vi.fn();
+const stress = vi.fn();
 const config: MqttConfig = {
   brokerUrl: 'mqtt://broker',
   topic: 'scale/body-composition',
@@ -27,7 +28,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   client = new Client();
   h.connect.mockReturnValue(client);
-  control = new AmazfitMqttControl(config, 'AA:BB:CC:DD:EE:FF', reset);
+  control = new AmazfitMqttControl(config, 'AA:BB:CC:DD:EE:FF', reset, stress);
   control.start();
 });
 afterEach(async () => {
@@ -37,7 +38,7 @@ afterEach(async () => {
 describe('Amazfit MQTT controls', () => {
   it('discovers a non-retained reset button, status sensor, and separate online/offline connection', async () => {
     client.emit('connect');
-    await vi.waitFor(() => expect(client.publishAsync).toHaveBeenCalledTimes(4));
+    await vi.waitFor(() => expect(client.publishAsync).toHaveBeenCalledTimes(6));
     const calls = client.publishAsync.mock.calls as unknown as Array<[string, string, unknown]>;
     const button = JSON.parse(calls.find(([t]) => t.startsWith('homeassistant/button/'))![1]);
     expect(button).toMatchObject({
@@ -78,7 +79,7 @@ describe('Amazfit MQTT controls', () => {
 
   it('republishes discovery on HA birth and state on broker reconnect', async () => {
     client.emit('message', 'homeassistant/status', Buffer.from('online'), {});
-    await vi.waitFor(() => expect(client.publishAsync).toHaveBeenCalledTimes(2));
+    await vi.waitFor(() => expect(client.publishAsync).toHaveBeenCalledTimes(3));
     control.setState('reset_pending', 'Wake scale');
     client.emit('connect');
     await vi.waitFor(() =>
@@ -87,6 +88,43 @@ describe('Amazfit MQTT controls', () => {
         JSON.stringify({ state: 'reset_pending', detail: 'Wake scale' }),
         expect.anything(),
       ),
+    );
+  });
+  it('discovers a verified-state stress switch and ignores retained or invalid commands', async () => {
+    client.emit('connect');
+    await vi.waitFor(() => expect(client.publishAsync).toHaveBeenCalledTimes(6));
+    const calls = client.publishAsync.mock.calls as unknown as Array<[string, string, unknown]>;
+    const discovery = JSON.parse(calls.find(([t]) => t.startsWith('homeassistant/switch/'))![1]);
+    expect(discovery).toMatchObject({
+      name: 'Stress measurement',
+      optimistic: false,
+      retain: false,
+      command_topic: `${control.baseTopic}/stress/set`,
+      state_topic: `${control.baseTopic}/stress/state`,
+      availability_mode: 'all',
+    });
+    expect(calls).toContainEqual([
+      `${control.baseTopic}/stress/availability`,
+      'offline',
+      { qos: 1, retain: true },
+    ]);
+    for (const [value, packet] of [
+      ['ON', { retain: true }],
+      ['OFF', { dup: true }],
+      ['true', {}],
+    ] as const)
+      client.emit('message', `${control.baseTopic}/stress/set`, Buffer.from(value), packet);
+    expect(stress).not.toHaveBeenCalled();
+    client.emit('message', `${control.baseTopic}/stress/set`, Buffer.from('ON'), {});
+    client.emit('message', `${control.baseTopic}/stress/set`, Buffer.from('OFF'), {});
+    expect(stress.mock.calls).toEqual([[true], [false]]);
+    expect(calls.some(([t]) => t.endsWith('/stress/state'))).toBe(false);
+    control.setStressState(true);
+    await vi.waitFor(() =>
+      expect(client.publishAsync).toHaveBeenCalledWith(`${control.baseTopic}/stress/state`, 'ON', {
+        qos: 1,
+        retain: true,
+      }),
     );
   });
 });

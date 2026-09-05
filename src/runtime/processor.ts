@@ -27,6 +27,7 @@ const BODY_COMP_LOG_KEYS: ReadonlyArray<keyof BodyComposition> = [
   'bmr',
   'metabolicAge',
   'heartRate',
+  'stress',
 ];
 const KG_METRICS = new Set<keyof BodyComposition>(['boneMass', 'muscleMass']);
 

@@ -108,17 +108,21 @@ describe('InfluxDbExporter', () => {
 });
 
 describe('toLineProtocol()', () => {
-  it('includes an optional pulse only when measured', () => {
+  it.each([
+    ['heartRate', 70],
+    ['stress', 39],
+    ['stress', 0],
+  ] as const)('includes optional %s=%s only when measured', (key, value) => {
     const timestamp = new Date('2026-09-05T14:00:00Z');
     const original = toLineProtocol(samplePayload, 'test', undefined, timestamp);
     const withPulse = toLineProtocol(
-      { ...samplePayload, heartRate: 70 },
+      { ...samplePayload, [key]: value },
       'test',
       undefined,
       timestamp,
     );
-    expect(original).not.toContain('heartRate');
-    expect(withPulse).toBe(original.replace(' 1788616800000', ',heartRate=70i 1788616800000'));
+    expect(original).not.toContain(key);
+    expect(withPulse).toBe(original.replace(' 1788616800000', `,${key}=${value}i 1788616800000`));
   });
 
   it('formats float fields with 2 decimal places', () => {

@@ -149,6 +149,7 @@ export class AmazfitSmartScaleAdapter implements ScaleAdapterCore, BroadcastSour
     const impedance =
       rawImpedance >= IMPEDANCE_MIN && rawImpedance <= IMPEDANCE_MAX ? rawImpedance : 0;
     const pulse = (flags & 0x0020) !== 0 ? data[12] : 0;
+    const stress = (flags & 0x0040) !== 0 ? data[13] : undefined;
 
     bleLog.info(
       `Amazfit frame ${hex}: ${weight.toFixed(2)} kg (${isLbs ? 'lb' : 'kg'} mode), ` +
@@ -161,6 +162,7 @@ export class AmazfitSmartScaleAdapter implements ScaleAdapterCore, BroadcastSour
       weight,
       impedance,
       ...(pulse > 0 ? { heartRate: pulse } : {}),
+      ...(stress !== undefined ? { stress } : {}),
       ...(userSlug ? { userSlug } : {}),
     };
   }
@@ -175,6 +177,7 @@ export class AmazfitSmartScaleAdapter implements ScaleAdapterCore, BroadcastSour
     return {
       ...buildPayload(reading.weight, reading.impedance, { fat }, profile),
       ...(reading.heartRate !== undefined ? { heartRate: reading.heartRate } : {}),
+      ...(reading.stress !== undefined ? { stress: reading.stress } : {}),
     };
   }
 }

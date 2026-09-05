@@ -127,13 +127,11 @@ export class AmazfitChannel implements FamilyChannel {
         if (ack) await this.up.write(ack, false);
         if (message) {
           const { module, data } = message;
-          if (
-            module !== 32 ||
-            data.length < 3 ||
-            data[0] !== 1 ||
-            data[1] !== 0x10 ||
-            data[2] !== command[1]
-          ) {
+          const matches =
+            command[0] === 3 && command[1] === 0x0d
+              ? data.length >= 3 && data[0] === 3 && data[1] === 0x0e && data[2] === command[2]
+              : data.length >= 3 && data[0] === 1 && data[1] === 0x10 && data[2] === command[1];
+          if (module !== 32 || !matches) {
             throw new Error('Unexpected Amazfit command response');
           }
           response = data;

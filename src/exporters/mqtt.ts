@@ -49,6 +49,7 @@ const HA_METRICS: HaMetricDef[] = [
   },
   { key: 'bmr', name: 'BMR', unit: 'kcal', icon: 'mdi:fire' },
   { key: 'metabolicAge', name: 'Metabolic Age', unit: 'yr', icon: 'mdi:calendar-clock' },
+  { key: 'stress', name: 'Stress', icon: 'mdi:brain', precision: 0, optional: true },
   {
     key: 'heartRate',
     name: 'Heart Rate',
@@ -64,6 +65,7 @@ const _haKeysCheck: Record<keyof BodyComposition, true> = {
   weight: true,
   impedance: true,
   heartRate: true,
+  stress: true,
   bmi: true,
   bodyFatPercent: true,
   waterPercent: true,

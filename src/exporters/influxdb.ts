@@ -24,6 +24,7 @@ const INT_FIELDS: (keyof BodyComposition)[] = [
   'bmr',
   'metabolicAge',
   'heartRate',
+  'stress',
 ];
 
 // Compile-time check: fails if a field is added to BodyComposition but not covered above
@@ -40,6 +41,7 @@ const _fieldCheck: Record<keyof BodyComposition, true> = {
   bmr: true,
   metabolicAge: true,
   heartRate: true,
+  stress: true,
 };
 void _fieldCheck;
 

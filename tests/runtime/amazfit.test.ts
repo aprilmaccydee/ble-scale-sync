@@ -2,7 +2,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AmazfitMaintenanceConfig } from '../../src/runtime/amazfit.js';
 import type { MaintenanceSession } from '../../src/ble/maintenance.js';
 
-const h = vi.hoisted(() => ({ provision: vi.fn(), open: vi.fn(), close: vi.fn() }));
+const h = vi.hoisted(() => ({
+  provision: vi.fn(),
+  open: vi.fn(),
+  close: vi.fn(),
+  stress: vi.fn(),
+}));
 vi.mock('../../src/scales/amazfit/channel.js', () => ({
   AmazfitChannel: class {
     open = h.open;
@@ -10,6 +15,7 @@ vi.mock('../../src/scales/amazfit/channel.js', () => ({
   },
 }));
 vi.mock('../../src/scales/amazfit/provision.js', () => ({ provisionProfiles: h.provision }));
+vi.mock('../../src/scales/amazfit/settings.js', () => ({ reconcileStress: h.stress }));
 
 const { AmazfitMaintenance } = await import('../../src/runtime/amazfit.js');
 const config: AmazfitMaintenanceConfig = {
@@ -54,6 +60,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   h.provision.mockResolvedValue(undefined);
   h.open.mockResolvedValue(undefined);
+  h.stress.mockResolvedValue(false);
 });
 afterEach(async () => {
   await Promise.all(controllers.splice(0).map((c) => c.stop()));
@@ -139,5 +146,48 @@ describe('Amazfit service maintenance', () => {
     await stopped;
     expect(h.provision).not.toHaveBeenCalled();
     expect(session.close).toHaveBeenCalledTimes(1);
+  });
+  it('applies queued stress changes without rewriting profiles, including a newer request during GATT', async () => {
+    const c = controller();
+    observe(c);
+    await vi.waitFor(() => expect(session.close).toHaveBeenCalledTimes(1));
+    expect(h.stress).toHaveBeenLastCalledWith(expect.anything(), undefined);
+    c.requestStress(true);
+    let resolveStress!: (v: boolean) => void;
+    h.stress.mockImplementationOnce(
+      () =>
+        new Promise<boolean>((resolve) => {
+          resolveStress = resolve;
+        }),
+    );
+    observe(c);
+    await vi.waitFor(() => expect(h.stress).toHaveBeenCalledTimes(2));
+    c.requestStress(false);
+    resolveStress(true);
+    await vi.waitFor(() => expect(session.close).toHaveBeenCalledTimes(2));
+    expect(observe(c)).toBe(true);
+    await vi.waitFor(() => expect(session.close).toHaveBeenCalledTimes(3));
+    expect(h.stress.mock.calls.map((args) => args[1])).toEqual([undefined, true, false]);
+    expect(h.provision).toHaveBeenCalledTimes(1);
+    expect(observe(c)).toBe(false);
+  });
+
+  it('retries stress failures after backoff and suppresses dry-run writes', async () => {
+    const c = controller();
+    observe(c);
+    await vi.waitFor(() => expect(session.close).toHaveBeenCalledTimes(1));
+    c.requestStress(true);
+    h.stress.mockRejectedValueOnce(new Error('readback mismatch'));
+    observe(c);
+    await vi.waitFor(() => expect(session.close).toHaveBeenCalledTimes(2));
+    observe(c);
+    expect(connect).toHaveBeenCalledTimes(2);
+    vi.spyOn(Date, 'now').mockReturnValue(Date.now() + 31_000);
+    observe(c);
+    await vi.waitFor(() => expect(session.close).toHaveBeenCalledTimes(3));
+    expect(h.stress).toHaveBeenLastCalledWith(expect.anything(), true);
+    const dry = controller({ ...config, dryRun: true });
+    dry.requestStress(true);
+    expect(observe(dry)).toBe(false);
   });
 });

@@ -83,6 +83,46 @@ presented as part of a new reading. This uses Home Assistant's documented
 [MQTT sensor missing-value behavior](https://www.home-assistant.io/integrations/sensor.mqtt/#state_topic).
 The value comes from the scale, not the body-composition calculation.
 
+## Stress measurement
+
+Home Assistant discovers a **Stress measurement** switch alongside **Reset scale
+profiles** and **Profile status** under **BLE Scale profiles**. This switch applies
+to the whole scale. A request waits for a completed step-off, reads the existing
+setting, writes only if needed, and verifies it by reading it back. It does not
+rewrite profiles for a stress-only change. Profile status reports `stress_pending`,
+`syncing`, `ready`, or `error`; errors retry after 30 seconds when the scale is awake.
+
+The switch reflects the verified setting, not the requested setting. It is
+unavailable until the first readback on startup, or after a failed readback.
+The scale stores the setting; startup reads it without changing it. No new
+`config.yaml` option is required. Unapplied requests are held only for the current
+service process; resend after a restart. Retained commands and duplicates are ignored.
+
+Using the same control base as the profile button:
+
+| Topic | Meaning |
+| --- | --- |
+| `<export-topic>/amazfit/<mac>/stress/set` | Send `ON` or `OFF`, without retain |
+| `<export-topic>/amazfit/<mac>/stress/state` | Retained, verified `ON` or `OFF` |
+| `<export-topic>/amazfit/<mac>/stress/availability` | Setting known/unknown (`online`/`offline`) |
+
+After status `ready`, take a fresh barefoot weigh-in and stay on through the
+stress stage. The maintenance wake-up is not exported. Stress follows body
+composition and heart rate, so it lengthens the measurement.
+
+When the completed frame has flag `0x0040`, byte 13 is exported as `stress`.
+The first such reading creates a **Stress** sensor for that user. It is a raw,
+unitless score, not a percentage. A flagged zero is preserved; an absent flag
+omits the field and makes an already discovered sensor unknown on that reading.
+Firmware V1.0.0.16 was verified to broadcast **39**, matching the on-scale display.
+
+Zepp 10.8.1's shared English `stress_measure_intro` resource describes a 0–100
+score with bands 0–39 relaxed, 40–59 normal, 60–79 medium, and 80–100 high. That
+resource explicitly describes watches and HRV. The A2003 measurement screen
+(`r5h0`) displays `MeasureData.getPressure()` directly; no A2003-specific mapping
+or calculation has been established. Consequently the integration exports the
+raw score without inferred categories, physiological interpretation, or units.
+
 ## MQTT reset button
 
 With a global MQTT exporter configured, the service maintains a separate control

@@ -8,6 +8,7 @@ const log = createLogger('Amazfit');
 /** Persistent control connection; uses a different client ID from measurement exports. */
 export class AmazfitMqttControl {
   private client?: MqttClient;
+  private stress?: boolean;
   private state = 'waiting_for_scale';
   private detail = 'Wake the scale and step off to apply profiles';
   readonly baseTopic: string;
@@ -17,6 +18,7 @@ export class AmazfitMqttControl {
     private readonly config: MqttConfig,
     address: string,
     private readonly reset: () => void,
+    private readonly setStress?: (enabled: boolean) => void,
   ) {
     const id = address.replace(/:/g, '').toLowerCase();
     this.baseTopic = `${config.topic}/amazfit/${id}`;
@@ -60,17 +62,24 @@ export class AmazfitMqttControl {
       ) {
         // A retained command or retransmission must never reset accounts on reconnect.
         this.reset();
+      } else if (topic === `${this.baseTopic}/stress/set` && !packet.retain && !packet.dup) {
+        const value = payload.toString();
+        if (value === 'ON' || value === 'OFF') this.setStress?.(value === 'ON');
       }
     });
   }
 
   private async initialize(client: MqttClient): Promise<void> {
-    await client.subscribeAsync([`${this.baseTopic}/reset/set`, 'homeassistant/status'], {
-      qos: 0,
-    });
+    await client.subscribeAsync(
+      [`${this.baseTopic}/reset/set`, `${this.baseTopic}/stress/set`, 'homeassistant/status'],
+      {
+        qos: 0,
+      },
+    );
     await this.publishDiscovery(client);
     await client.publishAsync(`${this.baseTopic}/availability`, 'online', { qos: 1, retain: true });
     await this.publishState(client);
+    await this.publishStress(client);
   }
 
   private async publishDiscovery(client: MqttClient): Promise<void> {
@@ -100,6 +109,30 @@ export class AmazfitMqttControl {
       { qos: 1, retain: true },
     );
     await client.publishAsync(
+      `homeassistant/switch/${this.deviceId}/stress_measurement/config`,
+      JSON.stringify({
+        ...common,
+        availability_topic: undefined,
+        availability: [
+          { topic: `${this.baseTopic}/availability` },
+          { topic: `${this.baseTopic}/stress/availability` },
+        ],
+        availability_mode: 'all',
+        name: 'Stress measurement',
+        unique_id: `${this.deviceId}_stress_measurement`,
+        command_topic: `${this.baseTopic}/stress/set`,
+        state_topic: `${this.baseTopic}/stress/state`,
+        payload_on: 'ON',
+        payload_off: 'OFF',
+        optimistic: false,
+        retain: false,
+        qos: 0,
+        entity_category: 'config',
+        icon: 'mdi:brain',
+      }),
+      { qos: 1, retain: true },
+    );
+    await client.publishAsync(
       `homeassistant/sensor/${this.deviceId}/profile_status/config`,
       JSON.stringify({
         ...common,
@@ -110,6 +143,29 @@ export class AmazfitMqttControl {
         json_attributes_topic: `${this.baseTopic}/state`,
         entity_category: 'diagnostic',
       }),
+      { qos: 1, retain: true },
+    );
+  }
+
+  setStressState(enabled?: boolean): void {
+    this.stress = enabled;
+    if (this.client?.connected) {
+      void this.publishStress(this.client).catch((error) =>
+        log.warn(`Stress status: ${errMsg(error)}`),
+      );
+    }
+  }
+
+  private async publishStress(client: MqttClient): Promise<void> {
+    if (this.stress !== undefined) {
+      await client.publishAsync(`${this.baseTopic}/stress/state`, this.stress ? 'ON' : 'OFF', {
+        qos: 1,
+        retain: true,
+      });
+    }
+    await client.publishAsync(
+      `${this.baseTopic}/stress/availability`,
+      this.stress === undefined ? 'offline' : 'online',
       { qos: 1, retain: true },
     );
   }

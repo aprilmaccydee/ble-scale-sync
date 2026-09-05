@@ -172,6 +172,37 @@ describe('MqttExporter', () => {
       expect(JSON.parse(mockPublishAsync.mock.calls.at(-1)![1])).not.toHaveProperty('heartRate');
     });
 
+    it.each([39, 0])(
+      'discovers a unitless stress score %s per user and clears missing values',
+      async (stress) => {
+        const exporter = new MqttExporter({ ...defaultConfig, haDiscovery: true });
+        const data = { ...samplePayload, stress };
+        await exporter.export(data, { userSlug: 'alice', userName: 'Alice' });
+        expect(mockPublishAsync).toHaveBeenCalledWith(
+          'scale/body-composition/alice',
+          JSON.stringify(data),
+          { qos: 1, retain: true },
+        );
+        const discovery = mockPublishAsync.mock.calls.find(
+          ([topic]) => topic === 'homeassistant/sensor/ble-scale-sync-alice/stress/config',
+        );
+        const payload = JSON.parse(discovery![1]);
+        expect(payload).toMatchObject({
+          name: 'Stress',
+          state_class: 'measurement',
+          value_template: '{{ value_json.stress | default(none) }}',
+          suggested_display_precision: 0,
+        });
+        expect(payload).not.toHaveProperty('unit_of_measurement');
+        mockPublishAsync.mockClear();
+        await exporter.export(samplePayload, { userSlug: 'alice', userName: 'Alice' });
+        expect(mockPublishAsync.mock.calls.some(([topic]) => topic.includes('/stress/'))).toBe(
+          false,
+        );
+        expect(JSON.parse(mockPublishAsync.mock.calls.at(-1)![1])).not.toHaveProperty('stress');
+      },
+    );
+
     it('publishes discovery payloads + status + data when haDiscovery is true', async () => {
       const config: MqttConfig = { ...defaultConfig, haDiscovery: true };
       const exporter = new MqttExporter(config);

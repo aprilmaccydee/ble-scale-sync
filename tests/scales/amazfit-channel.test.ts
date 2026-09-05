@@ -47,7 +47,11 @@ describe('Huami channel v1', () => {
     );
   });
 
-  it('enables both notifications before sending, handles a reply before its ACK, and ACKs UP', async () => {
+  it.each([
+    ['0108', '01100800'],
+    ['030d00', '030e000101'],
+    ['030d0100', '030e0101'],
+  ])('routes command %s, handles reply before ACK and ACKs UP', async (command, response) => {
     const notifications = new Map<string, (data: Buffer) => void>();
     const writes: Array<[string, string]> = [];
     const unsub = vi.fn();
@@ -64,7 +68,7 @@ describe('Huami channel v1', () => {
           expect(notifications.size).toBe(2);
           if (data.equals(Buffer.from([1]))) notifications.get(CHANNEL_DOWN)!(Buffer.from([2, 1]));
           if (data[0] === 3) {
-            notifications.get(CHANNEL_UP)!(Buffer.from('0307010004000000200001100800', 'hex'));
+            notifications.get(CHANNEL_UP)!(packets(32, Buffer.from(response, 'hex'), 1)[0]);
             notifications.get(CHANNEL_DOWN)!(Buffer.from([4, data[2], 1, data[3]]));
           }
         },
@@ -72,7 +76,9 @@ describe('Huami channel v1', () => {
     }
     const channel = new AmazfitChannel(chars, { onDisconnect: vi.fn() });
     await channel.open();
-    expect(await channel.request(Buffer.from([1, 8]))).toEqual(Buffer.from([1, 0x10, 8, 0]));
+    expect(await channel.request(Buffer.from(command, 'hex'))).toEqual(
+      Buffer.from(response, 'hex'),
+    );
     expect(writes).toContainEqual([CHANNEL_UP, '04010100']);
     channel.close();
     expect(unsub).toHaveBeenCalledTimes(2);

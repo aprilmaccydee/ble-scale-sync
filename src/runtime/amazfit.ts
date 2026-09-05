@@ -5,6 +5,7 @@ import type { MqttConfig } from '../exporters/config.js';
 import { AmazfitChannel } from '../scales/amazfit/channel.js';
 import { profileFingerprint, type AmazfitProfile } from '../scales/amazfit/profiles.js';
 import { provisionProfiles, type ResetProgress } from '../scales/amazfit/provision.js';
+import { reconcileStress } from '../scales/amazfit/settings.js';
 import { resolveAmazfitProfiles } from '../config/resolve.js';
 import { AmazfitMqttControl } from './amazfit-mqtt.js';
 import type { AppContext } from './context.js';
@@ -49,6 +50,10 @@ export class AmazfitMaintenance implements GattMaintenance {
   private config?: AmazfitMaintenanceConfig;
   private control?: AmazfitMqttControl;
   private pending = false;
+  private profilesPending = false;
+  private desiredStress?: boolean;
+  private actualStress?: boolean;
+  private stressRevision = 0;
   private reset?: ResetProgress;
   private task?: Promise<void>;
   private abort = new AbortController();
@@ -81,6 +86,13 @@ export class AmazfitMaintenance implements GattMaintenance {
       this.abort.abort();
       this.abort = new AbortController();
       this.pending = !!config && !config.dryRun;
+      this.profilesPending = this.pending;
+      if (config?.address !== previous?.address || config?.dryRun !== previous?.dryRun) {
+        this.desiredStress = undefined;
+        this.actualStress = undefined;
+        this.stressRevision++;
+        this.control?.setStressState(undefined);
+      }
       this.reset = undefined;
       this.nextAttemptAt = 0;
       this.status(
@@ -107,9 +119,13 @@ export class AmazfitMaintenance implements GattMaintenance {
         const config = this.config;
         if (revision !== this.controlRevision || this.stopped || !config?.mqtt || config.dryRun)
           return;
-        this.control = new AmazfitMqttControl(config.mqtt, config.address, () =>
-          this.requestReset(),
+        this.control = new AmazfitMqttControl(
+          config.mqtt,
+          config.address,
+          () => this.requestReset(),
+          (enabled) => this.requestStress(enabled),
         );
+        this.control.setStressState(this.actualStress);
         this.control.setState(this.state, this.detail);
         this.control.start();
       })
@@ -119,11 +135,24 @@ export class AmazfitMaintenance implements GattMaintenance {
   requestReset(): void {
     if (!this.config || this.config.dryRun || this.stopped || this.reset || this.task) return;
     this.reset = { removed: new Set(), removalVerified: false };
+    this.profilesPending = true;
     this.pending = true;
     this.nextAttemptAt = 0;
     this.status(
       'reset_pending',
       'Wake the scale and step off; configured accounts will be removed and recreated',
+    );
+  }
+
+  requestStress(enabled: boolean): void {
+    if (!this.config || this.config.dryRun || this.stopped) return;
+    this.desiredStress = enabled;
+    this.stressRevision++;
+    this.pending = true;
+    this.nextAttemptAt = 0;
+    this.status(
+      'stress_pending',
+      `Wake the scale and step off to turn stress measurement ${enabled ? 'on' : 'off'}`,
     );
   }
 
@@ -171,25 +200,45 @@ export class AmazfitMaintenance implements GattMaintenance {
   ): Promise<void> {
     let session: MaintenanceSession | undefined;
     let channel: AmazfitChannel | undefined;
-    this.status(reset ? 'resetting' : 'syncing', 'Applying configured scale profiles');
+    const profilesPending = this.profilesPending;
+    const stressRevision = this.stressRevision;
+    const desiredStress = this.desiredStress;
+    this.status(
+      reset ? 'resetting' : 'syncing',
+      profilesPending
+        ? 'Applying profiles and checking stress measurement'
+        : 'Updating stress measurement',
+    );
     try {
       session = await connect();
       signal.throwIfAborted();
       channel = new AmazfitChannel(session.charMap, session.device, signal);
       await channel.open();
-      await provisionProfiles(channel, config.users, reset);
+      if (profilesPending) await provisionProfiles(channel, config.users, reset);
+      const actualStress = await reconcileStress(channel, desiredStress);
       // Close before releasing the export gate; trailing broadcasts belong to
       // the maintenance wake-up and were already consumed by adapter dedup.
       channel.close();
       await session.close();
       session = undefined;
       if (generation === this.generation && !this.stopped) {
-        this.pending = false;
+        this.profilesPending = false;
         this.reset = undefined;
-        this.status('ready', `Verified ${config.users.length} profiles; ready for a new weigh-in`);
+        this.actualStress = actualStress;
+        this.control?.setStressState(actualStress);
+        this.pending = stressRevision !== this.stressRevision;
+        if (!this.pending) this.desiredStress = undefined;
+        this.status(
+          this.pending ? 'stress_pending' : 'ready',
+          this.pending
+            ? 'Waiting to apply the latest stress measurement request'
+            : `Verified ${config.users.length} profiles; stress measurement ${actualStress ? 'on' : 'off'}; ready for a new weigh-in`,
+        );
       }
     } catch (error) {
       if (!signal.aborted && generation === this.generation) {
+        this.actualStress = undefined;
+        this.control?.setStressState(undefined);
         this.nextAttemptAt = Date.now() + 30_000;
         this.status('error', `${errMsg(error)}; will retry when the scale is awake`);
       }
