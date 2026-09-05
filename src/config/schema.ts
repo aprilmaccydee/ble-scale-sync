@@ -227,6 +227,8 @@ export const BleSchema = z
 export const ScaleSchema = z.object({
   weight_unit: z.enum(['kg', 'lbs']).default('kg'),
   height_unit: z.enum(['cm', 'in']).default('cm'),
+  /** Omitted/generic retains the existing A2003 estimates. */
+  amazfit_algorithm: z.enum(['generic', 'zepp']).optional(),
 });
 
 export const ExporterEntrySchema = z

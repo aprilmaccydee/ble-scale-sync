@@ -28,8 +28,24 @@ const BODY_COMP_LOG_KEYS: ReadonlyArray<keyof BodyComposition> = [
   'metabolicAge',
   'heartRate',
   'stress',
+  'proteinPercent',
+  'skeletalMuscleMass',
+  'subcutaneousFatPercent',
+  'subcutaneousFatMass',
+  'bodyFatMass',
+  'fatFreeMass',
+  'musclePercent',
+  'idealWeight',
 ];
-const KG_METRICS = new Set<keyof BodyComposition>(['boneMass', 'muscleMass']);
+const KG_METRICS = new Set<keyof BodyComposition>([
+  'boneMass',
+  'muscleMass',
+  'skeletalMuscleMass',
+  'subcutaneousFatMass',
+  'bodyFatMass',
+  'fatFreeMass',
+  'idealWeight',
+]);
 
 /** Tolerance for treating a historical replay weight as a duplicate of last_known_weight. */
 const DEDUP_KG_TOLERANCE = 0.1;

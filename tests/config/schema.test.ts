@@ -616,6 +616,13 @@ describe('BleSchema', () => {
 // ─── ScaleSchema ───────────────────────────────────────────────────────────
 
 describe('ScaleSchema', () => {
+  it('accepts opt-in Zepp or the original generic Amazfit algorithm and rejects misspellings', () => {
+    expect(ScaleSchema.parse({}).amazfit_algorithm).toBeUndefined();
+    for (const algorithm of ['generic', 'zepp']) {
+      expect(ScaleSchema.parse({ amazfit_algorithm: algorithm }).amazfit_algorithm).toBe(algorithm);
+    }
+    expect(ScaleSchema.safeParse({ amazfit_algorithm: 'zep' }).success).toBe(false);
+  });
   it('applies defaults when empty', () => {
     const result = ScaleSchema.safeParse({});
     expect(result.success).toBe(true);

@@ -15,6 +15,14 @@ const FLOAT_FIELDS: (keyof BodyComposition)[] = [
   'waterPercent',
   'boneMass',
   'muscleMass',
+  'proteinPercent',
+  'skeletalMuscleMass',
+  'subcutaneousFatPercent',
+  'subcutaneousFatMass',
+  'bodyFatMass',
+  'fatFreeMass',
+  'musclePercent',
+  'idealWeight',
 ];
 
 const INT_FIELDS: (keyof BodyComposition)[] = [
@@ -42,6 +50,14 @@ const _fieldCheck: Record<keyof BodyComposition, true> = {
   metabolicAge: true,
   heartRate: true,
   stress: true,
+  proteinPercent: true,
+  skeletalMuscleMass: true,
+  subcutaneousFatPercent: true,
+  subcutaneousFatMass: true,
+  bodyFatMass: true,
+  fatFreeMass: true,
+  musclePercent: true,
+  idealWeight: true,
 };
 void _fieldCheck;
 
@@ -82,7 +98,8 @@ export function toLineProtocol(
   const fields: string[] = [];
 
   for (const key of FLOAT_FIELDS) {
-    fields.push(`${key}=${(data[key] as number).toFixed(2)}`);
+    const value = data[key];
+    if (value !== undefined) fields.push(`${key}=${value.toFixed(2)}`);
   }
   for (const key of INT_FIELDS) {
     const value = data[key];

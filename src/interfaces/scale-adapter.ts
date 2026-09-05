@@ -98,6 +98,15 @@ export interface BodyComposition {
   physiqueRating: number;
   bmr: number;
   metabolicAge: number;
+  /** Optional vendor composition outputs; omitted when unsupported/unavailable. */
+  proteinPercent?: number;
+  skeletalMuscleMass?: number;
+  subcutaneousFatPercent?: number;
+  subcutaneousFatMass?: number;
+  bodyFatMass?: number;
+  fatFreeMass?: number;
+  musclePercent?: number;
+  idealWeight?: number;
 }
 
 /** Describes a BLE characteristic binding for multi-char adapters. */
@@ -185,6 +194,8 @@ export interface ConnectionContext {
  * S800 MiBeacon bind key. Adapters that do not need it omit `configure`.
  */
 export interface AdapterRuntimeConfig {
+  /** Select the A2003 calculation locally; does not change scale profiles. */
+  amazfitAlgorithm?: 'generic' | 'zepp';
   /** Explicit A2003 account IDs; do not derive these from config array order. */
   amazfitUsers?: Array<{ id: number; slug: string }>;
   /** MiBeacon bind key (32 hex chars) for broadcast-encrypted scales (Xiaomi S800). */

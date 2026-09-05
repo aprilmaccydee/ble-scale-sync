@@ -49,6 +49,70 @@ const HA_METRICS: HaMetricDef[] = [
   },
   { key: 'bmr', name: 'BMR', unit: 'kcal', icon: 'mdi:fire' },
   { key: 'metabolicAge', name: 'Metabolic Age', unit: 'yr', icon: 'mdi:calendar-clock' },
+  {
+    key: 'proteinPercent',
+    name: 'Protein',
+    unit: '%',
+    icon: 'mdi:percent',
+    precision: 1,
+    optional: true,
+  },
+  {
+    key: 'skeletalMuscleMass',
+    name: 'Skeletal Muscle Mass',
+    unit: 'kg',
+    deviceClass: 'weight',
+    precision: 1,
+    optional: true,
+  },
+  {
+    key: 'subcutaneousFatPercent',
+    name: 'Subcutaneous Fat',
+    unit: '%',
+    icon: 'mdi:percent',
+    precision: 1,
+    optional: true,
+  },
+  {
+    key: 'subcutaneousFatMass',
+    name: 'Subcutaneous Fat Mass',
+    unit: 'kg',
+    deviceClass: 'weight',
+    precision: 1,
+    optional: true,
+  },
+  {
+    key: 'bodyFatMass',
+    name: 'Body Fat Mass',
+    unit: 'kg',
+    deviceClass: 'weight',
+    precision: 1,
+    optional: true,
+  },
+  {
+    key: 'fatFreeMass',
+    name: 'Fat-Free Mass',
+    unit: 'kg',
+    deviceClass: 'weight',
+    precision: 1,
+    optional: true,
+  },
+  {
+    key: 'musclePercent',
+    name: 'Muscle',
+    unit: '%',
+    icon: 'mdi:percent',
+    precision: 1,
+    optional: true,
+  },
+  {
+    key: 'idealWeight',
+    name: 'Ideal Weight',
+    unit: 'kg',
+    deviceClass: 'weight',
+    precision: 1,
+    optional: true,
+  },
   { key: 'stress', name: 'Stress', icon: 'mdi:brain', precision: 0, optional: true },
   {
     key: 'heartRate',
@@ -75,6 +139,14 @@ const _haKeysCheck: Record<keyof BodyComposition, true> = {
   physiqueRating: true,
   bmr: true,
   metabolicAge: true,
+  proteinPercent: true,
+  skeletalMuscleMass: true,
+  subcutaneousFatPercent: true,
+  subcutaneousFatMass: true,
+  bodyFatMass: true,
+  fatFreeMass: true,
+  musclePercent: true,
+  idealWeight: true,
 };
 void _haKeysCheck;
 
@@ -182,8 +254,8 @@ export class MqttExporter implements Exporter {
         name: metric.name,
         unique_id: `${deviceId}_${metric.key}`,
         state_topic: dataTopic,
-        // HA treats None as unknown for numeric sensors. An absent pulse must
-        // not leave a previous weigh-in's pulse displayed as this one's result.
+        // Missing optional readings become unknown, including when a different
+        // algorithm or unavailable impedance omits previously discovered metrics.
         value_template: `{{ value_json.${metric.key}${metric.optional ? ' | default(none)' : ''} }}`,
         state_class: 'measurement',
         availability: [{ topic: statusTopic }],

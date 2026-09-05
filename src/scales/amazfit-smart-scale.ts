@@ -8,7 +8,14 @@ import type {
   AdapterRuntimeConfig,
 } from '../interfaces/scale-adapter.js';
 import { bleLog } from '../ble/types.js';
-import { buildPayload, computeBiaFat, normalizeServiceUuid, uuid16 } from './body-comp-helpers.js';
+import {
+  buildPayload,
+  computeBiaFat,
+  normalizeServiceUuid,
+  r2,
+  uuid16,
+} from './body-comp-helpers.js';
+import { computeAmazfitComposition, type AmazfitComposition } from './amazfit/body-composition.js';
 import type { MatchDescriptor } from './match-descriptor.js';
 
 /** Huami vendor service the scale broadcasts its measurement on. */
@@ -83,6 +90,7 @@ export class AmazfitSmartScaleAdapter implements ScaleAdapterCore, BroadcastSour
   private readonly recentMeasurements = new Map<string, number>();
   private readonly now: () => number;
   private users = new Map<number, string>();
+  private algorithm: 'generic' | 'zepp' = 'generic';
 
   constructor(now: () => number = Date.now) {
     this.now = now;
@@ -90,6 +98,7 @@ export class AmazfitSmartScaleAdapter implements ScaleAdapterCore, BroadcastSour
 
   configure(config: AdapterRuntimeConfig): void {
     this.users = new Map(config.amazfitUsers?.map((u) => [u.id, u.slug]));
+    this.algorithm = config.amazfitAlgorithm ?? 'generic';
   }
 
   matches(device: BleDeviceInfo): boolean {
@@ -174,10 +183,32 @@ export class AmazfitSmartScaleAdapter implements ScaleAdapterCore, BroadcastSour
   }
 
   computeMetrics(reading: ScaleReading, profile: UserProfile): BodyComposition {
-    const fat =
-      reading.impedance > 0 ? computeBiaFat(reading.weight, reading.impedance, profile) : undefined;
+    const zepp =
+      this.algorithm === 'zepp'
+        ? computeAmazfitComposition(reading.weight, reading.impedance, profile)
+        : null;
+    let metrics: BodyComposition;
+    if (zepp) {
+      metrics = { weight: r2(reading.weight), impedance: r2(reading.impedance), ...zepp };
+      // Keep native float32 arithmetic in the algorithm; remove its binary
+      // representation noise only at the shared two-decimal export boundary.
+      for (const key of Object.keys(zepp) as Array<keyof AmazfitComposition>) {
+        metrics[key] = r2(zepp[key]);
+      }
+    } else {
+      if (this.algorithm === 'zepp') {
+        bleLog.warn(
+          'Amazfit Zepp algorithm rejected the inputs; using generic estimates without Zepp-only metrics.',
+        );
+      }
+      const fat =
+        reading.impedance > 0
+          ? computeBiaFat(reading.weight, reading.impedance, profile)
+          : undefined;
+      metrics = buildPayload(reading.weight, reading.impedance, { fat }, profile);
+    }
     return {
-      ...buildPayload(reading.weight, reading.impedance, { fat }, profile),
+      ...metrics,
       ...(reading.heartRate !== undefined ? { heartRate: reading.heartRate } : {}),
       ...(reading.stress !== undefined ? { stress: reading.stress } : {}),
     };

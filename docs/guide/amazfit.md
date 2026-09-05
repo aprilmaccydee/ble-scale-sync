@@ -5,6 +5,65 @@ on-scale profiles through an ESPHome proxy, without Zepp or a cloud account.
 The protocol was recovered from Zepp 10.8.1 and verified on A2003 firmware
 V1.0.0.16. Profile management currently requires `esphome-proxy` and continuous mode.
 
+## Composition algorithm
+
+Select the recovered Zepp A2003 algorithm in `config.yaml`:
+
+```yaml
+scale:
+  weight_unit: kg
+  height_unit: cm
+  amazfit_algorithm: zepp
+```
+
+The default, `generic`, retains the project's existing estimates. `zepp` uses a
+TypeScript port of `libhtBodyfatBia4TwoLegs.so`, version 1.29, from Zepp 10.8.1.
+It runs locally without an APK, Android runtime, account or cloud service.
+The option supports config reload and only changes the A2003 calculation.
+Profile provisioning, avatars and display settings are independent.
+
+The port matches all 17 composition outputs exactly across 2,832 synthetic
+inputs executed against the original ARM64 library (48,144 comparisons), including
+both sexes/modes, fractional weights, demographic boundaries and impedance.
+The library is the reference for the regression tests. For example, 100 kg /
+178 cm / age 33 / female / normal / 553 ohm gives BMR 1608 and protein 9.9%,
+compared with BMR 1786 in generic mode.
+
+With MQTT discovery enabled, Zepp mode adds these sensors to each user's device:
+
+| MQTT field | Home Assistant sensor | Unit |
+| --- | --- | --- |
+| `proteinPercent` | Protein | % |
+| `skeletalMuscleMass` | Skeletal Muscle Mass | kg |
+| `subcutaneousFatPercent` | Subcutaneous Fat | % |
+| `subcutaneousFatMass` | Subcutaneous Fat Mass | kg |
+| `bodyFatMass` | Body Fat Mass | kg |
+| `fatFreeMass` | Fat-Free Mass | kg |
+| `musclePercent` | Muscle | % |
+| `idealWeight` | Ideal Weight | kg |
+
+Existing BMI, fat, water, bone, muscle, visceral fat, body age and BMR sensors
+also use the selected calculation. `physiqueRating` carries the library's 1–9
+body-type code in Zepp mode. Heart rate and stress remain measured packet values.
+Values stay in kg/% internally; the export boundary rounds to two decimals and
+HA suggests one displayed decimal for composition measurements.
+
+The library accepts weight 10–200 kg, height 90–220 cm, age 6–99 and decoded
+impedance 200–1200 ohm. Rejected inputs retain the existing generic fallback,
+with a log message and all eight Zepp-only fields omitted. Previously discovered
+optional sensors become `unknown` when a later payload omits them, including
+after switching back to generic mode. No invented zero values are sent.
+
+The port preserves library quirks, including its integer intermediate rounding
+and whole-kg fat subtraction in `fatFreeMass`. Its always-zero body score,
+classification thresholds and exercise-planning estimates are not exported as
+measurements. Age comes from the configured user profile; tests supply the same
+six numeric inputs to the port and native library.
+
+Reference: library SHA-256
+`1065c0fddddcab561629ac9b8626026ced453c2e0b446ee57e25189cec6efe4c`.
+Synthetic reference outputs are retained in `tests/fixtures/amazfit-zepp-1.29.json`.
+
 ## Enable profiles
 
 Set `ble.scale_mac` to your scale's Bluetooth address, and add a unique

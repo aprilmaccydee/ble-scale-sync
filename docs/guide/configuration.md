@@ -351,6 +351,7 @@ scale:
 | ------------- | -------- | ------- | -------------------------------------------------------- |
 | `weight_unit` | No       | `kg`    | `kg` or `lbs`. Display only; calculations always use kg. |
 | `height_unit` | No       | `cm`    | `cm` or `in`. Used for height input in user profiles.    |
+| `amazfit_algorithm` | No | `generic` | A2003 only: `generic` keeps the existing estimates; `zepp` uses the recovered Zepp 1.29 calculation and adds composition sensors. See [Amazfit](/guide/amazfit#composition-algorithm). |
 
 ### Users
 

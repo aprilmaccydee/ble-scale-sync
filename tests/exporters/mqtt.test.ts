@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { MqttExporter } from '../../src/exporters/mqtt.js';
 import type { MqttConfig } from '../../src/exporters/config.js';
 import type { BodyComposition } from '../../src/interfaces/scale-adapter.js';
+import { AmazfitSmartScaleAdapter } from '../../src/scales/amazfit-smart-scale.js';
 
 const samplePayload: BodyComposition = {
   weight: 80,
@@ -138,6 +139,77 @@ describe('MqttExporter', () => {
   });
 
   describe('Home Assistant discovery', () => {
+    it('exports the Zepp algorithm and discovers all eight extra metrics per user, clearing absent results', async () => {
+      const adapter = new AmazfitSmartScaleAdapter();
+      adapter.configure({ amazfitAlgorithm: 'zepp' });
+      const data = adapter.computeMetrics(
+        { weight: 100, impedance: 553, heartRate: 70, stress: 39 },
+        {
+          height: 178,
+          age: 33,
+          gender: 'female',
+          isAthlete: false,
+        },
+      );
+      const exporter = new MqttExporter({ ...defaultConfig, haDiscovery: true });
+      const context = { userSlug: 'alice', userName: 'Alice' };
+      await exporter.export(data, context);
+      const units = {
+        proteinPercent: '%',
+        skeletalMuscleMass: 'kg',
+        subcutaneousFatPercent: '%',
+        subcutaneousFatMass: 'kg',
+        bodyFatMass: 'kg',
+        fatFreeMass: 'kg',
+        musclePercent: '%',
+        idealWeight: 'kg',
+      };
+      for (const [key, unit] of Object.entries(units)) {
+        const discovery = mockPublishAsync.mock.calls.find(
+          ([topic]) => topic === `homeassistant/sensor/ble-scale-sync-alice/${key}/config`,
+        );
+        expect(discovery?.[2]).toEqual({ qos: 1, retain: true });
+        expect(JSON.parse(discovery![1])).toMatchObject({
+          unique_id: `ble-scale-sync-alice_${key}`,
+          state_topic: 'scale/body-composition/alice',
+          unit_of_measurement: unit,
+          state_class: 'measurement',
+          suggested_display_precision: 1,
+          value_template: `{{ value_json.${key} | default(none) }}`,
+        });
+      }
+      expect(mockPublishAsync).toHaveBeenCalledWith(
+        'scale/body-composition/alice',
+        JSON.stringify(data),
+        { qos: 1, retain: true },
+      );
+      expect(data.bmr).toBe(1608);
+      expect(data.proteinPercent).toBe(9.9);
+
+      mockPublishAsync.mockClear();
+      adapter.configure({ amazfitAlgorithm: 'generic' });
+      await exporter.export(
+        adapter.computeMetrics(
+          { weight: 100, impedance: 553 },
+          {
+            height: 178,
+            age: 33,
+            gender: 'female',
+            isAthlete: false,
+          },
+        ),
+        context,
+      );
+      const next = JSON.parse(mockPublishAsync.mock.calls.at(-1)![1]);
+      expect(next.bmr).toBe(1786);
+      for (const key of Object.keys(units)) {
+        expect(next).not.toHaveProperty(key);
+        // Retained discovery remains and default(none) changes the state to unknown.
+        expect(
+          mockPublishAsync.mock.calls.some(([topic]) => topic.endsWith(`/${key}/config`)),
+        ).toBe(false);
+      }
+    });
     it('publishes a measured pulse to the correct user and discovers a bpm sensor', async () => {
       const exporter = new MqttExporter({ ...defaultConfig, haDiscovery: true });
       const data = { ...samplePayload, heartRate: 70 };

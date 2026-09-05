@@ -108,6 +108,22 @@ describe('InfluxDbExporter', () => {
 });
 
 describe('toLineProtocol()', () => {
+  it('exports optional composition floats while accepting adapters that omit them', () => {
+    expect(() => toLineProtocol(samplePayload, 'test')).not.toThrow();
+    const line = toLineProtocol(
+      {
+        ...samplePayload,
+        proteinPercent: 9.9,
+        skeletalMuscleMass: 31.3,
+        subcutaneousFatPercent: 38.7,
+      },
+      'test',
+    );
+    expect(line).toContain('proteinPercent=9.90');
+    expect(line).toContain('skeletalMuscleMass=31.30');
+    expect(line).toContain('subcutaneousFatPercent=38.70');
+    expect(line).not.toContain('idealWeight');
+  });
   it.each([
     ['heartRate', 70],
     ['stress', 39],

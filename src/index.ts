@@ -305,6 +305,7 @@ async function main(): Promise<void> {
         qnReportByte,
         qnWeightAck,
         amazfitUsers,
+        amazfitAlgorithm: ctx.config.scale.amazfit_algorithm,
       });
   };
   applyAdapterConfig(ctx.config.ble?.bind_key ?? undefined);
