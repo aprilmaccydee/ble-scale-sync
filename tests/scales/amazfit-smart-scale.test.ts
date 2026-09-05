@@ -1,4 +1,5 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { bleLog } from '../../src/ble/types.js';
 import { evaluateAdvertisement } from '../../src/ble/advertisement.js';
 import { buildPayload, computeBiaFat } from '../../src/scales/body-comp-helpers.js';
 import { AmazfitSmartScaleAdapter } from '../../src/scales/amazfit-smart-scale.js';
@@ -19,6 +20,10 @@ const IDLE_FRAME = Buffer.from('0a80e6c778a37900000000000000000000000000', 'hex'
 
 describe('AmazfitSmartScaleAdapter', () => {
   const adapter = new AmazfitSmartScaleAdapter();
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
 
   it('matches the scan-response frame that carries only the name', () => {
     expect(
@@ -103,6 +108,20 @@ describe('AmazfitSmartScaleAdapter', () => {
         serviceData: [{ uuid: 'fee0', data: BLE_MONITOR_FRAME }],
       }),
     ).toEqual({ kind: 'complete', reading: { weight: 85.3, impedance: 517.2 } });
+  });
+
+  it('logs a decoded frame once, not on every re-broadcast', () => {
+    const fresh = new AmazfitSmartScaleAdapter();
+    const info = vi.spyOn(bleLog, 'info').mockImplementation(() => {});
+
+    fresh.parseServiceData('fee0', PROXY_FRAME);
+    fresh.parseServiceData('fee0', PROXY_FRAME);
+    fresh.parseServiceData('fee0', PROXY_FRAME);
+    expect(info).toHaveBeenCalledTimes(1);
+    expect(info.mock.calls[0][0]).toContain(PROXY_FRAME.toString('hex'));
+
+    fresh.parseServiceData('fee0', BLE_MONITOR_FRAME);
+    expect(info).toHaveBeenCalledTimes(2);
   });
 
   it('uses BIA when impedance is present and the BMI estimate otherwise', () => {

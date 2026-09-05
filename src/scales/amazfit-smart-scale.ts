@@ -82,6 +82,13 @@ export class AmazfitSmartScaleAdapter implements ScaleAdapterCore, BroadcastSour
   readonly normalizesWeight = true;
   readonly preferPassive = true;
 
+  /**
+   * Hex of the last frame logged. The scale repeats one frame every second or
+   * so for as long as it stays awake, and the runtime dedups the reading only
+   * after parsing, so without this the info line below would repeat with it.
+   */
+  private lastLoggedFrame = '';
+
   matches(device: BleDeviceInfo): boolean {
     // The ESPHome proxy delivers the advertisement and the scan response as
     // separate frames: one carries the name plus the Huami manufacturer id,
@@ -122,11 +129,15 @@ export class AmazfitSmartScaleAdapter implements ScaleAdapterCore, BroadcastSour
     // Info, not debug: the frame layout is only partly verified, and the raw
     // hex next to the decode is what lets a wrong reading be diagnosed from a
     // normal log instead of a debug capture of every advertisement in range.
-    bleLog.info(
-      `Amazfit frame ${data.toString('hex')}: ${weight.toFixed(2)} kg (${isLbs ? 'lb' : 'kg'} mode), ` +
-        `impedance ${rawImpedance.toFixed(1)} ohm${impedance === 0 ? ' (out of range, using BMI estimate)' : ''}, ` +
-        `pulse ${pulse} bpm, user bytes ${data.subarray(14, 20).toString('hex')}`,
-    );
+    const hex = data.toString('hex');
+    if (hex !== this.lastLoggedFrame) {
+      this.lastLoggedFrame = hex;
+      bleLog.info(
+        `Amazfit frame ${hex}: ${weight.toFixed(2)} kg (${isLbs ? 'lb' : 'kg'} mode), ` +
+          `impedance ${rawImpedance.toFixed(1)} ohm${impedance === 0 ? ' (out of range, using BMI estimate)' : ''}, ` +
+          `pulse ${pulse} bpm, user bytes ${data.subarray(14, 20).toString('hex')}`,
+      );
+    }
 
     return { weight, impedance };
   }
