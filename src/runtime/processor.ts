@@ -198,6 +198,10 @@ async function processSingleUser(
   exporters: Exporter[] | undefined,
 ): Promise<boolean> {
   const user = ctx.config.users[0];
+  if (raw.reading.userSlug && raw.reading.userSlug !== user.slug) {
+    log.warn(`Scale selected a profile no longer configured: ${raw.reading.userSlug}`);
+    return true;
+  }
   const all = expandReadings(raw);
 
   checkAndLogUpdate(ctx.config.update_check);
@@ -243,7 +247,13 @@ async function processMultiUser(
       (all.length > 1 ? ` (+ ${all.length - 1} historical)` : ''),
   );
 
-  const match = matchUserByWeight(ctx.config.users, matchWeight, ctx.config.unknown_user);
+  const match = latest.userSlug
+    ? {
+        user: ctx.config.users.find((u) => u.slug === latest.userSlug) ?? null,
+        tier: 'scale_profile',
+        warning: `Scale selected a profile no longer configured: ${latest.userSlug}`,
+      }
+    : matchUserByWeight(ctx.config.users, matchWeight, ctx.config.unknown_user);
 
   if (!match.user) {
     if (match.warning) log.warn(match.warning);

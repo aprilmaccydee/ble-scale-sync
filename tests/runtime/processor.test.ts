@@ -244,6 +244,24 @@ describe('processReading: single-user', () => {
 });
 
 describe('processReading: multi-user', () => {
+  it('uses a configured on-scale profile even when weight matching would choose someone else', async () => {
+    const getExportersForUser = vi.fn(() => []);
+    const ctx = makeCtx([dad, mom]);
+    await processReading(ctx, rawReading({ weight: 80, impedance: 500, userSlug: 'mom' }), {
+      getExportersForUser,
+    });
+    expect(getExportersForUser).toHaveBeenCalledWith('mom');
+  });
+
+  it('does not silently assign a removed on-scale profile to the nearest person', async () => {
+    const getExportersForUser = vi.fn(() => []);
+    await processReading(
+      makeCtx([dad, mom]),
+      rawReading({ weight: 80, impedance: 500, userSlug: 'removed' }),
+      { getExportersForUser },
+    );
+    expect(getExportersForUser).not.toHaveBeenCalled();
+  });
   it('returns true and beeps when no user matches and unknown_user is ignore', async () => {
     // Null last_known_weight on both users so matchUserByWeight cannot fall
     // back to last-known proximity (Tier 4) and reaches the unknown_user

@@ -102,6 +102,7 @@ export { ReadingWatcher };
 
 /** Inputs for {@link createReadingSource}; primitives only (no runtime ctx). */
 export interface ReadingSourceOptions {
+  maintenance?: import('./maintenance.js').GattMaintenance;
   bleHandler?: BleHandlerName;
   mqttProxy?: MqttProxyConfig;
   esphomeProxy?: EsphomeProxyConfig;
@@ -146,6 +147,7 @@ export async function createReadingSource(opts: ReadingSourceOptions): Promise<R
       opts.targetMac,
       opts.profile,
       opts.scaleAuth,
+      opts.maintenance,
     );
     return { kind: 'watcher', watcher, failureLogPrefix: 'Error processing ESPHome reading' };
   }

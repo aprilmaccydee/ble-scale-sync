@@ -43,6 +43,8 @@ export interface LiveWeight {
 export interface ScaleReading {
   weight: number;
   impedance: number;
+  /** Configured user selected by a verified on-device profile ID, when available. */
+  userSlug?: string;
   /**
    * When set, marks this reading as historical: the scale dumped it from its
    * onboard cache rather than producing it live. Adapters populate it for
@@ -175,6 +177,8 @@ export interface ConnectionContext {
  * S800 MiBeacon bind key. Adapters that do not need it omit `configure`.
  */
 export interface AdapterRuntimeConfig {
+  /** Explicit A2003 account IDs; do not derive these from config array order. */
+  amazfitUsers?: Array<{ id: number; slug: string }>;
   /** MiBeacon bind key (32 hex chars) for broadcast-encrypted scales (Xiaomi S800). */
   bindKey?: string;
   /**

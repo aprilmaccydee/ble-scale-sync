@@ -66,9 +66,15 @@ export async function openGattSession(
   if (!connResp) {
     throw new Error(`ESPHome proxy could not connect to ${mac}: ${lastErr}`);
   }
-  const services = (await conn.listBluetoothGATTServicesService(
-    addr,
-  )) as EsphomeGattServicesResponse;
+  let services: EsphomeGattServicesResponse;
+  try {
+    services = (await conn.listBluetoothGATTServicesService(addr)) as EsphomeGattServicesResponse;
+  } catch (error) {
+    // A connected scale must be released even if discovery fails before the
+    // caller receives a session it could close (including profile maintenance).
+    await conn.disconnectBluetoothDeviceService(addr).catch(() => {});
+    throw error;
+  }
 
   bleLog.debug(`ESPHome connected to ${mac} (mtu=${connResp.mtu ?? 'unknown'})`);
 

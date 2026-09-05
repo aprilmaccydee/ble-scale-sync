@@ -2,7 +2,7 @@
 
 import { parseArgs } from 'node:util';
 import { loadAppConfig } from './load.js';
-import { resolveExportersForUser } from './resolve.js';
+import { resolveExportersForUser, resolveAmazfitProfiles } from './resolve.js';
 
 const { values } = parseArgs({
   options: {
@@ -23,6 +23,7 @@ if (values.help) {
 
 try {
   const { source, config } = loadAppConfig(values.config as string | undefined);
+  resolveAmazfitProfiles(config);
   const userCount = config.users.length;
   const exporterCount = config.users.reduce(
     (sum, u) => sum + resolveExportersForUser(config, u).length,

@@ -294,8 +294,18 @@ async function main(): Promise<void> {
     const qnProtocolByte = ctx.config.ble?.qn_protocol_byte ?? undefined;
     const qnReportByte = ctx.config.ble?.qn_report_byte ?? undefined;
     const qnWeightAck = ctx.config.ble?.qn_weight_ack ?? undefined;
+    const amazfitUsers = ctx.config.users
+      .filter((u) => u.amazfit_user_id !== undefined)
+      .map((u) => ({ id: u.amazfit_user_id!, slug: u.slug }));
     for (const a of adapters)
-      a.configure?.({ bindKey, weightUnit, qnProtocolByte, qnReportByte, qnWeightAck });
+      a.configure?.({
+        bindKey,
+        weightUnit,
+        qnProtocolByte,
+        qnReportByte,
+        qnWeightAck,
+        amazfitUsers,
+      });
   };
   applyAdapterConfig(ctx.config.ble?.bind_key ?? undefined);
 

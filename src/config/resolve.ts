@@ -1,5 +1,6 @@
 import type { UserProfile } from '../interfaces/scale-adapter.js';
 import type { BleHandlerName } from '../ble/types.js';
+import { validateProfiles, type AmazfitProfile } from '../scales/amazfit/profiles.js';
 import type {
   AppConfig,
   UserConfig,
@@ -74,6 +75,27 @@ export function resolveUserProfile(user: UserConfig, scaleConfig: ScaleConfig): 
   };
 }
 
+/** Called after environment overrides, including SCALE_MAC / CONTINUOUS_MODE. */
+export function resolveAmazfitProfiles(config: AppConfig): AmazfitProfile[] {
+  const users = config.users
+    .filter((u) => u.amazfit_user_id !== undefined)
+    .map((u) => ({
+      id: u.amazfit_user_id!,
+      slug: u.slug,
+      name: u.name,
+      profile: resolveUserProfile(u, config.scale),
+    }));
+  if (!users.length) return users;
+  if (config.ble?.handler !== 'esphome-proxy' || !config.runtime?.continuous_mode) {
+    throw new Error('Amazfit profile management requires esphome-proxy and continuous_mode: true');
+  }
+  if (!config.ble.scale_mac || !/^(?:[0-9a-f]{2}:){5}[0-9a-f]{2}$/i.test(config.ble.scale_mac)) {
+    throw new Error('Amazfit profile management requires ble.scale_mac (the scale Bluetooth MAC)');
+  }
+  validateProfiles(users);
+  return users;
+}
+
 // --- Runtime config resolution ---
 
 export interface ResolvedRuntimeConfig {
@@ -95,6 +117,7 @@ export interface ResolvedRuntimeConfig {
  * Resolve runtime config from AppConfig (uses first user as default profile).
  */
 export function resolveRuntimeConfig(config: AppConfig): ResolvedRuntimeConfig {
+  resolveAmazfitProfiles(config);
   const user = config.users[0];
   const profile = resolveUserProfile(user, config.scale);
 

@@ -5,6 +5,7 @@ import type {
   ScaleAdapterCore,
   ScaleReading,
   UserProfile,
+  AdapterRuntimeConfig,
 } from '../interfaces/scale-adapter.js';
 import { bleLog } from '../ble/types.js';
 import { buildPayload, computeBiaFat, normalizeServiceUuid, uuid16 } from './body-comp-helpers.js';
@@ -22,72 +23,49 @@ const LOCAL_NAME = 'AMAZFIT SCALE';
  * Whole-body impedance window, in ohms, inside which the decoded value is used
  * for BIA. Outside it the reading falls back to the BMI estimate.
  *
- * The impedance field is the least certain part of this decode (see below), so
- * an implausible value must not poison body composition: a frame from a
- * weigh-in the scale could not measure impedance for carries garbage there
- * (0xd9b3 = 5573 ohm in the ble_monitor capture), and the vendor itself has
- * produced 2321 ohm readings that its own app rejected.
+ * The native decoder can return an unsigned underflow for malformed input;
+ * unavailable or implausible values must not enter the BIA calculation.
  */
 const IMPEDANCE_MIN = 100;
 const IMPEDANCE_MAX = 1500;
 
 /**
- * How long an identical frame is treated as the scale repeating itself rather
+ * How long a measurement is treated as the scale repeating itself rather
  * than a new weigh-in.
  *
- * The scale re-broadcasts its last completed measurement, byte for byte, for
+ * The scale re-broadcasts its last completed measurement for
  * several minutes after the weigh-in. The transports' own dedup window is 30 s,
  * the same as the default scan cooldown, so every cooldown cycle re-read and
  * re-exported the same reading: one weigh-in produced 27 exports. A genuine
- * second weigh-in inside this window with the same weight to 50 g, the same
- * impedance to 0.1 ohm and the same pulse would be dropped too; that is not a
- * realistic loss.
+ * second weigh-in has a different packed timestamp, even at the same weight.
  */
 const REPEAT_WINDOW_MS = 15 * 60 * 1000;
 
 /**
  * Amazfit Smart Scale (Huami / Zepp).
  *
- * Broadcast-only for our purposes: the scale advertises a 20-byte service-data
+ * The adapter is passive: the scale advertises a 20-byte service-data
  * frame on the Huami vendor service 0xFEE0, both while measuring and for a
  * while afterwards. There is no pairing and nothing is written to the scale.
  *
- * Frame layout, from the reverse engineering in
- * custom-components/ble_monitor#910 and its shipped parser
- * (`ble_parser/amazfit.py`), cross-checked against a capture from this project:
+ * Frame layout recovered from Zepp 10.8.1's r12 / MeasureData parser and
+ * impedanceDecode(uint32_t) in libhtBodyfatBia4TwoLegs.so. Captures include
+ * custom-components/ble_monitor#910 and this project's ESPHome proxy.
  *
- *   [0]      control byte: bit 0 set when the scale is in pounds (0xbb vs
- *            0xba on completed measurements, 0x0a / 0x8a on idle and
- *            weight-only frames); the other bits are not decoded
- *   [1]      progress flags: bit 7 set once the measurement is finished. A
- *            weigh-in broadcasts the same payload three times while it
- *            completes (0x00, then 0x02 once the pulse is in, then 0x82), and
- *            only the finished frame is repeated afterwards. Bits 0-2 vary
- *            between weigh-ins and are not decoded.
- *   [2-4]    unknown (looks like a counter or timestamp)
- *   [5-6]    impedance x10, uint16 LE. See IMPEDANCE_MIN / IMPEDANCE_MAX.
- *   [7-8]    weight, uint16 LE: x200 in kg mode, x100 in lb mode
- *   [9-11]   all zero on weight-only and idle frames
- *   [12]     pulse, bpm (0 when not measured; not exported)
- *   [13]     unknown
- *   [14-19]  user slot identification; 0xff.. when the scale matched nobody
+ *   [0-1]    LE flags: lb=0x0001, weight=0x0008, impedance=0x0010,
+ *            pulse=0x0020, pressure=0x0040, family ID=0x0080,
+ *            session=0x0100, result=0x0600 (0 measuring/1 success/2 failed),
+ *            user matching=0x0800, jin=0x4000, leave=0x8000
+ *   [2-6]    LE packed UTC timestamp: year13/month4/day5/hour6/min6/sec6
+ *   [7-8]    LE weight: kg x200 or lb x100 (jin x100 is also kg x200)
+ *   [9-11]   encoded 24-bit impedance; NOT bytes 5-6 (those are timestamp)
+ *   [12]     pulse, bpm; [13] pressure
+ *   [14-19]  LE 48-bit family member ID; all 0xff means unrecognised
  *
- * A frame is accepted only when bit 7 of byte 1 is set and bytes 9-11 are not
- * all zero. The second gate is the one ble_monitor ships; frames that fail it
- * include the idle re-broadcast (weight 0.6 kg), a weight-only weigh-in the
- * scale could not measure impedance for, and a stored value for a different
- * user, and nothing in the frame separates those cases, so all of them are
- * dropped and logged in debug mode until a capture shows which bit does.
- *
- * ble_monitor's fixture: `ba82e6c7fc3414a442bf46ec68000462bba30100` is
- * 85.3 kg, 517.2 ohm, 104 bpm; the same person's Xiaomi Mi Scale 2 read
- * 514 ohm, which is what makes the impedance decode credible.
- *
- * The pound flag is from this project: a scale set to lb produced
- * `bb82ea270bd0284c5ef046ee4a00ffffffffffff` for a person the display showed
- * at 109 kg. Read as kg x200 that is 120.7 kg; read as lb x100 it is
- * 241.4 lb = 109.5 kg. ble_monitor only ever saw kg-mode frames, so it has no
- * such flag.
+ * Export after the leave flag, so the final pulse/impedance has arrived.
+ * A failed composition measurement or a weight-only weigh-in can still
+ * provide a valid final weight. The packed timestamp stays in the dedup key;
+ * ScaleReading.timestamp is reserved by the bridge for historical replay.
  */
 export class AmazfitSmartScaleAdapter implements ScaleAdapterCore, BroadcastSource {
   readonly name = 'Amazfit Smart Scale';
@@ -101,13 +79,17 @@ export class AmazfitSmartScaleAdapter implements ScaleAdapterCore, BroadcastSour
   readonly normalizesWeight = true;
   readonly preferPassive = true;
 
-  /** Last accepted frame and when it was first seen; see REPEAT_WINDOW_MS. */
-  private lastFrame = '';
-  private lastFrameAt = 0;
+  /** Timestamp/weight keys suppress repeats even when optional fields change. */
+  private readonly recentMeasurements = new Map<string, number>();
   private readonly now: () => number;
+  private users = new Map<number, string>();
 
   constructor(now: () => number = Date.now) {
     this.now = now;
+  }
+
+  configure(config: AdapterRuntimeConfig): void {
+    this.users = new Map(config.amazfitUsers?.map((u) => [u.id, u.slug]));
   }
 
   matches(device: BleDeviceInfo): boolean {
@@ -130,13 +112,16 @@ export class AmazfitSmartScaleAdapter implements ScaleAdapterCore, BroadcastSour
   parseServiceData(uuid: string, data: Buffer): ScaleReading | null {
     if (normalizeServiceUuid(uuid) !== SVC_HUAMI || data.length !== FRAME_LENGTH) return null;
 
-    const isLbs = (data[0] & 0x01) !== 0;
+    const flags = data.readUInt16LE(0);
+    const isLbs = (flags & 0x01) !== 0;
     const rawWeight = data.readUInt16LE(7);
     const weight = isLbs ? (rawWeight / 100) * 0.45359237 : rawWeight / 200;
-    const finished = (data[1] & 0x80) !== 0;
-    const measured = data[9] !== 0 || data[10] !== 0 || data[11] !== 0;
+    const leftScale = (flags & 0x8000) !== 0;
+    const hasWeight = (flags & 0x0008) !== 0;
+    const result = (flags >>> 9) & 3;
+    const settled = result === 1 || result === 2;
 
-    if (!finished || !measured || weight < WEIGHT_MIN) {
+    if (!leftScale || !hasWeight || !settled || rawWeight === 0xffff || weight < WEIGHT_MIN) {
       bleLog.debug(
         `Amazfit frame without a completed measurement (${weight.toFixed(2)} kg): ${data.toString('hex')}`,
       );
@@ -145,25 +130,34 @@ export class AmazfitSmartScaleAdapter implements ScaleAdapterCore, BroadcastSour
 
     const hex = data.toString('hex');
     const now = this.now();
-    if (hex === this.lastFrame && now - this.lastFrameAt < REPEAT_WINDOW_MS) return null;
-    this.lastFrame = hex;
-    this.lastFrameAt = now;
+    for (const [key, seenAt] of this.recentMeasurements) {
+      if (now - seenAt >= REPEAT_WINDOW_MS) this.recentMeasurements.delete(key);
+    }
+    const measurementKey = `${flags & 0x4001}:${data.subarray(2, 9).toString('hex')}`;
+    if (this.recentMeasurements.has(measurementKey)) return null;
+    this.recentMeasurements.set(measurementKey, now);
 
-    const rawImpedance = data.readUInt16LE(5) / 10;
+    const encoded = data.readUIntLE(9, 3);
+    // Native impedanceDecode: subtract a 10-bit offset from the rearranged
+    // 12-bit value, then unsigned-shift by one. 0xffffff means unavailable.
+    const rawImpedance =
+      (flags & 0x0010) !== 0 && encoded !== 0xffffff
+        ? (((encoded & 0xf00) | (encoded >>> 16)) -
+            (((encoded & 0xff) << 2) + ((encoded >>> 12) & 0xf))) >>>
+          1
+        : 0;
     const impedance =
       rawImpedance >= IMPEDANCE_MIN && rawImpedance <= IMPEDANCE_MAX ? rawImpedance : 0;
-    const pulse = data[12];
+    const pulse = (flags & 0x0020) !== 0 ? data[12] : 0;
 
-    // Info, not debug: the frame layout is only partly verified, and the raw
-    // hex next to the decode is what lets a wrong reading be diagnosed from a
-    // normal log instead of a debug capture of every advertisement in range.
     bleLog.info(
       `Amazfit frame ${hex}: ${weight.toFixed(2)} kg (${isLbs ? 'lb' : 'kg'} mode), ` +
-        `impedance ${rawImpedance.toFixed(1)} ohm${impedance === 0 ? ' (out of range, using BMI estimate)' : ''}, ` +
+        `impedance ${rawImpedance} ohm${impedance === 0 ? ' (unavailable or out of range, using BMI estimate)' : ''}, ` +
         `pulse ${pulse} bpm, user bytes ${data.subarray(14, 20).toString('hex')}`,
     );
 
-    return { weight, impedance };
+    const userSlug = flags & 0x0080 ? this.users.get(data.readUIntLE(14, 6)) : undefined;
+    return { weight, impedance, ...(userSlug ? { userSlug } : {}) };
   }
 
   isComplete(reading: ScaleReading): boolean {

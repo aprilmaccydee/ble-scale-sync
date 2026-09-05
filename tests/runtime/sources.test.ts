@@ -42,7 +42,10 @@ const h = vi.hoisted(() => {
 vi.mock('../../src/ble/index.js', () => ({ createReadingSource: h.createReadingSource }));
 vi.mock('../../src/runtime/poll-source.js', () => ({ PollReadingSource: h.FakePollSource }));
 vi.mock('../../src/ble/watchdog.js', () => ({ ConsecutiveFailureWatchdog: h.FakeWatchdog }));
-vi.mock('../../src/config/resolve.js', () => ({ resolveUserProfile: h.resolveUserProfile }));
+vi.mock('../../src/config/resolve.js', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../src/config/resolve.js')>()),
+  resolveUserProfile: h.resolveUserProfile,
+}));
 vi.mock('../../src/ble/types.js', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../src/ble/types.js')>();
   return { ...actual, abortableSleep: h.abortableSleep };

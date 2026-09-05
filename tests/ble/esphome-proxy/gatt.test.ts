@@ -74,6 +74,14 @@ function fakeConnection() {
 }
 
 describe('openGattSession', () => {
+  it('disconnects if service discovery fails before the caller receives a session', async () => {
+    const conn = fakeConnection();
+    conn.listBluetoothGATTServicesService.mockRejectedValueOnce(new Error('discovery failed'));
+    await expect(
+      openGattSession({ connection: conn } as never, '00:00:00:00:00:01'),
+    ).rejects.toThrow('discovery failed');
+    expect(conn.disconnectBluetoothDeviceService).toHaveBeenCalledWith(ADDR);
+  });
   it('connects, discovers, and exposes a UUID-keyed charMap', async () => {
     const conn = fakeConnection();
     const session = await openGattSession({ connection: conn } as never, '00:00:00:00:00:01');

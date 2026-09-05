@@ -13,6 +13,7 @@ import { bleLog, errMsg, IMPEDANCE_GRACE_MS } from '../types.js';
 import { AsyncQueue } from '../async-queue.js';
 import { EsphomeProxyPool } from './pool.js';
 import { logTransportCapabilities } from './scan.js';
+import type { GattMaintenance } from '../maintenance.js';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -101,6 +102,7 @@ export class ReadingWatcher implements Watcher {
     targetMac?: string,
     profile?: UserProfile,
     scaleAuth?: ScaleAuth,
+    private readonly maintenance?: GattMaintenance,
   ) {
     this.config = config;
     this.adapters = adapters;
@@ -169,6 +171,16 @@ export class ReadingWatcher implements Watcher {
     // broadcast yields nothing (QN Elis 1) from its per-advertisement stream
     // rather than waiting (see the hasParseableBroadcastSource doc comment).
     const decision = evaluateAdvertisement(adapter, info, { waitForBroadcast: false });
+
+    // Evaluate first so the adapter remembers completed maintenance wake-ups;
+    // they must not be exported later as stale repeats after a profile reset.
+    if (
+      this.pool &&
+      this.maintenance?.observe(info, address, adapter.name, () => this.pool!.connectGatt(address))
+    ) {
+      this.grace.cancel(address);
+      return;
+    }
 
     if (decision.kind === 'complete') {
       this.grace.cancel(address);

@@ -9,6 +9,7 @@ import { PollReadingSource } from './poll-source.js';
 import type { ReadingSource } from './loop.js';
 import type { AppContext } from './context.js';
 import { raceWithLiveness, TransportWedgedError } from './proxy-liveness.js';
+import { AmazfitMaintenance, amazfitConfig } from './amazfit.js';
 
 const log = createLogger('Sync');
 
@@ -52,6 +53,8 @@ export async function buildReadingSource(
     registerNewUser: ctx.config.users[0]?.beurer_register_new_user,
   });
 
+  const maintenance =
+    ctx.bleHandler === 'esphome-proxy' ? new AmazfitMaintenance(amazfitConfig(ctx)) : undefined;
   const plan = await createReadingSource({
     bleHandler: ctx.bleHandler,
     mqttProxy: ctx.mqttProxy,
@@ -60,6 +63,7 @@ export async function buildReadingSource(
     targetMac: ctx.scaleMac,
     profile: profile(),
     scaleAuth: scaleAuth(),
+    maintenance,
   });
 
   if (plan.kind === 'watcher') {
@@ -72,18 +76,29 @@ export async function buildReadingSource(
       (ctx.config.ble?.proxy_liveness_timeout_min ?? DEFAULT_PROXY_LIVENESS_MIN) * 60_000;
     return {
       source: {
-        start: () => watcher.start(),
-        stop: () => watcher.stop(),
+        start: async () => {
+          await watcher.start();
+          maintenance?.start();
+        },
+        stop: async () => {
+          try {
+            await maintenance?.stop();
+          } finally {
+            await watcher.stop();
+          }
+        },
         nextReading: (signal) => raceWithLiveness(watcher, limitMs, signal),
       },
       failureLogPrefix: plan.failureLogPrefix,
-      onSourceReload: () =>
+      onSourceReload: () => {
+        maintenance?.configure(amazfitConfig(ctx));
         watcher.updateConfig({
           adapters,
           targetMac: ctx.scaleMac,
           profile: profile(),
           scaleAuth: scaleAuth(),
-        }),
+        });
+      },
       onFailure: (err) => {
         if (!(err instanceof TransportWedgedError)) return;
         log.warn(

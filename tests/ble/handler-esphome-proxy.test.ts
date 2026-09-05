@@ -612,6 +612,40 @@ describe('ReadingWatcher', () => {
     vi.clearAllMocks();
   });
 
+  it('consumes maintenance wake-ups without exporting them after profile setup', async () => {
+    const { AmazfitSmartScaleAdapter } = await import('../../src/scales/amazfit-smart-scale.js');
+    const { ReadingWatcher } = await import('../../src/ble/handler-esphome-proxy/index.js');
+    const adapter = new AmazfitSmartScaleAdapter();
+    const maintenance = { observe: vi.fn(() => true) };
+    const watcher = new ReadingWatcher(
+      config,
+      [adapter],
+      undefined,
+      undefined,
+      undefined,
+      maintenance,
+    );
+    await watcher.start();
+    const frame = Buffer.from('bb83ea270b933f8255f3488a5100010000000000', 'hex');
+    const push = () =>
+      mockClient.pushBle({
+        address: 0x112233445566,
+        name: 'Amazfit Scale',
+        rssi: -55,
+      serviceDataList: [{ uuid: 'fee0', legacyDataList: [...frame], data: '' }],
+      });
+    push();
+    maintenance.observe.mockReturnValue(false);
+    push(); // Same maintenance wake-up must remain suppressed.
+    frame[6] += 4; // A new timestamp is a fresh weigh-in.
+    frame.writeUInt16LE(22000, 7);
+    push();
+    const reading = await watcher.nextReading(AbortSignal.timeout(1000));
+    expect(reading.reading.weight).toBeCloseTo(99.7903, 4);
+    expect(maintenance.observe).toHaveBeenCalled();
+    await watcher.stop();
+  });
+
   it('enqueues broadcast readings for consumption via nextReading()', async () => {
     const adapter = makeBroadcastAdapter();
     const { ReadingWatcher } = await import('../../src/ble/handler-esphome-proxy/index.js');

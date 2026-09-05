@@ -69,11 +69,13 @@ describe('createReadingSource (#246)', () => {
     ]);
   });
 
-  it('esphome-proxy returns a watcher with 5 ctor args (scaleAuth forwarded) + esphome prefix', async () => {
+  it('esphome-proxy forwards scaleAuth and maintenance to its watcher', async () => {
     const esphomeProxy = { host: 'h' } as never;
+    const maintenance = { observe: vi.fn(() => false) };
     const plan = await createReadingSource({
       bleHandler: 'esphome-proxy',
       esphomeProxy,
+      maintenance,
       adapters: ADAPTERS,
       targetMac: 'AA:BB:CC:DD:EE:FF',
       profile: PROFILE,
@@ -89,6 +91,7 @@ describe('createReadingSource (#246)', () => {
       'AA:BB:CC:DD:EE:FF',
       PROFILE,
       AUTH,
+      maintenance,
     ]);
   });
 
