@@ -17,6 +17,13 @@ const PROXY_FRAME = Buffer.from('bb82ea270bd0284c5ef046ee4a00ffffffffffff', 'hex
 const WEIGHT_ONLY_FRAME = Buffer.from('0a00e6c7fab3d9aa410000000000000000000000', 'hex');
 // Same issue: idle re-broadcast, 0.6 kg.
 const IDLE_FRAME = Buffer.from('0a80e6c778a37900000000000000000000000000', 'hex');
+// One weigh-in as the proxy saw it: the payload repeats while byte 1 walks
+// 0x00 -> 0x02 (pulse in) -> 0x82 (finished). 241.6 lb, 70 bpm.
+const IN_PROGRESS_FRAMES = [
+  Buffer.from('bb00ea270b205f605e4e04800000ffffffffffff', 'hex'),
+  Buffer.from('bb02ea270b205f605e4e04804600ffffffffffff', 'hex'),
+];
+const FINISHED_FRAME = Buffer.from('bb82ea270b205f605e4e04804600ffffffffffff', 'hex');
 
 describe('AmazfitSmartScaleAdapter', () => {
   const adapter = new AmazfitSmartScaleAdapter();
@@ -88,6 +95,19 @@ describe('AmazfitSmartScaleAdapter', () => {
     expect(adapter.parseServiceData('fee0', IDLE_FRAME)).toBeNull();
   });
 
+  it('reports one weigh-in once, from its finished frame only', () => {
+    const fresh = new AmazfitSmartScaleAdapter();
+    vi.spyOn(bleLog, 'info').mockImplementation(() => {});
+
+    for (const frame of IN_PROGRESS_FRAMES) {
+      expect(fresh.parseServiceData('fee0', frame)).toBeNull();
+    }
+    const reading = fresh.parseServiceData('fee0', FINISHED_FRAME);
+    expect(reading?.weight).toBeCloseTo(109.588, 3);
+    // 2435.2 ohm is outside the plausible window, so BIA is not attempted.
+    expect(reading?.impedance).toBe(0);
+  });
+
   it('ignores other services and frame lengths', () => {
     expect(adapter.parseServiceData('181b', BLE_MONITOR_FRAME)).toBeNull();
     expect(adapter.parseServiceData('fee0', BLE_MONITOR_FRAME.subarray(0, 19))).toBeNull();
@@ -110,18 +130,26 @@ describe('AmazfitSmartScaleAdapter', () => {
     ).toEqual({ kind: 'complete', reading: { weight: 85.3, impedance: 517.2 } });
   });
 
-  it('logs a decoded frame once, not on every re-broadcast', () => {
-    const fresh = new AmazfitSmartScaleAdapter();
+  it('treats an identical frame as the scale repeating itself, not a new weigh-in', () => {
+    let now = 1_000_000;
+    const fresh = new AmazfitSmartScaleAdapter(() => now);
     const info = vi.spyOn(bleLog, 'info').mockImplementation(() => {});
 
-    fresh.parseServiceData('fee0', PROXY_FRAME);
-    fresh.parseServiceData('fee0', PROXY_FRAME);
-    fresh.parseServiceData('fee0', PROXY_FRAME);
+    expect(fresh.parseServiceData('fee0', PROXY_FRAME)).not.toBeNull();
+    now += 32_000; // one scan cooldown later, still the same broadcast
+    expect(fresh.parseServiceData('fee0', PROXY_FRAME)).toBeNull();
+    now += 5 * 60_000;
+    expect(fresh.parseServiceData('fee0', PROXY_FRAME)).toBeNull();
     expect(info).toHaveBeenCalledTimes(1);
     expect(info.mock.calls[0][0]).toContain(PROXY_FRAME.toString('hex'));
 
-    fresh.parseServiceData('fee0', BLE_MONITOR_FRAME);
+    // A different frame is a new measurement straight away.
+    expect(fresh.parseServiceData('fee0', BLE_MONITOR_FRAME)).not.toBeNull();
     expect(info).toHaveBeenCalledTimes(2);
+
+    // And the first frame is accepted again once the repeat window has passed.
+    now += 16 * 60_000;
+    expect(fresh.parseServiceData('fee0', PROXY_FRAME)).not.toBeNull();
   });
 
   it('uses BIA when impedance is present and the BMI estimate otherwise', () => {

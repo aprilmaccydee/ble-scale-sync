@@ -32,6 +32,20 @@ const IMPEDANCE_MIN = 100;
 const IMPEDANCE_MAX = 1500;
 
 /**
+ * How long an identical frame is treated as the scale repeating itself rather
+ * than a new weigh-in.
+ *
+ * The scale re-broadcasts its last completed measurement, byte for byte, for
+ * several minutes after the weigh-in. The transports' own dedup window is 30 s,
+ * the same as the default scan cooldown, so every cooldown cycle re-read and
+ * re-exported the same reading: one weigh-in produced 27 exports. A genuine
+ * second weigh-in inside this window with the same weight to 50 g, the same
+ * impedance to 0.1 ohm and the same pulse would be dropped too; that is not a
+ * realistic loss.
+ */
+const REPEAT_WINDOW_MS = 15 * 60 * 1000;
+
+/**
  * Amazfit Smart Scale (Huami / Zepp).
  *
  * Broadcast-only for our purposes: the scale advertises a 20-byte service-data
@@ -45,19 +59,24 @@ const IMPEDANCE_MAX = 1500;
  *   [0]      control byte: bit 0 set when the scale is in pounds (0xbb vs
  *            0xba on completed measurements, 0x0a / 0x8a on idle and
  *            weight-only frames); the other bits are not decoded
- *   [1]      flags, not decoded
+ *   [1]      progress flags: bit 7 set once the measurement is finished. A
+ *            weigh-in broadcasts the same payload three times while it
+ *            completes (0x00, then 0x02 once the pulse is in, then 0x82), and
+ *            only the finished frame is repeated afterwards. Bits 0-2 vary
+ *            between weigh-ins and are not decoded.
  *   [2-4]    unknown (looks like a counter or timestamp)
  *   [5-6]    impedance x10, uint16 LE. See IMPEDANCE_MIN / IMPEDANCE_MAX.
  *   [7-8]    weight, uint16 LE: x200 in kg mode, x100 in lb mode
- *   [9-11]   all zero until the measurement has completed with impedance
+ *   [9-11]   all zero on weight-only and idle frames
  *   [12]     pulse, bpm (0 when not measured; not exported)
  *   [13]     unknown
  *   [14-19]  user slot identification; 0xff.. when the scale matched nobody
  *
- * The [9-11] gate is the one ble_monitor ships. Frames that fail it include the
- * idle re-broadcast (weight 0.6 kg), a weight-only weigh-in the scale could not
- * measure impedance for, and a stored value for a different user, and the
- * frame carries no field that separates those cases, so all of them are
+ * A frame is accepted only when bit 7 of byte 1 is set and bytes 9-11 are not
+ * all zero. The second gate is the one ble_monitor ships; frames that fail it
+ * include the idle re-broadcast (weight 0.6 kg), a weight-only weigh-in the
+ * scale could not measure impedance for, and a stored value for a different
+ * user, and nothing in the frame separates those cases, so all of them are
  * dropped and logged in debug mode until a capture shows which bit does.
  *
  * ble_monitor's fixture: `ba82e6c7fc3414a442bf46ec68000462bba30100` is
@@ -82,12 +101,14 @@ export class AmazfitSmartScaleAdapter implements ScaleAdapterCore, BroadcastSour
   readonly normalizesWeight = true;
   readonly preferPassive = true;
 
-  /**
-   * Hex of the last frame logged. The scale repeats one frame every second or
-   * so for as long as it stays awake, and the runtime dedups the reading only
-   * after parsing, so without this the info line below would repeat with it.
-   */
-  private lastLoggedFrame = '';
+  /** Last accepted frame and when it was first seen; see REPEAT_WINDOW_MS. */
+  private lastFrame = '';
+  private lastFrameAt = 0;
+  private readonly now: () => number;
+
+  constructor(now: () => number = Date.now) {
+    this.now = now;
+  }
 
   matches(device: BleDeviceInfo): boolean {
     // The ESPHome proxy delivers the advertisement and the scan response as
@@ -112,14 +133,21 @@ export class AmazfitSmartScaleAdapter implements ScaleAdapterCore, BroadcastSour
     const isLbs = (data[0] & 0x01) !== 0;
     const rawWeight = data.readUInt16LE(7);
     const weight = isLbs ? (rawWeight / 100) * 0.45359237 : rawWeight / 200;
+    const finished = (data[1] & 0x80) !== 0;
     const measured = data[9] !== 0 || data[10] !== 0 || data[11] !== 0;
 
-    if (!measured || weight < WEIGHT_MIN) {
+    if (!finished || !measured || weight < WEIGHT_MIN) {
       bleLog.debug(
         `Amazfit frame without a completed measurement (${weight.toFixed(2)} kg): ${data.toString('hex')}`,
       );
       return null;
     }
+
+    const hex = data.toString('hex');
+    const now = this.now();
+    if (hex === this.lastFrame && now - this.lastFrameAt < REPEAT_WINDOW_MS) return null;
+    this.lastFrame = hex;
+    this.lastFrameAt = now;
 
     const rawImpedance = data.readUInt16LE(5) / 10;
     const impedance =
@@ -129,15 +157,11 @@ export class AmazfitSmartScaleAdapter implements ScaleAdapterCore, BroadcastSour
     // Info, not debug: the frame layout is only partly verified, and the raw
     // hex next to the decode is what lets a wrong reading be diagnosed from a
     // normal log instead of a debug capture of every advertisement in range.
-    const hex = data.toString('hex');
-    if (hex !== this.lastLoggedFrame) {
-      this.lastLoggedFrame = hex;
-      bleLog.info(
-        `Amazfit frame ${hex}: ${weight.toFixed(2)} kg (${isLbs ? 'lb' : 'kg'} mode), ` +
-          `impedance ${rawImpedance.toFixed(1)} ohm${impedance === 0 ? ' (out of range, using BMI estimate)' : ''}, ` +
-          `pulse ${pulse} bpm, user bytes ${data.subarray(14, 20).toString('hex')}`,
-      );
-    }
+    bleLog.info(
+      `Amazfit frame ${hex}: ${weight.toFixed(2)} kg (${isLbs ? 'lb' : 'kg'} mode), ` +
+        `impedance ${rawImpedance.toFixed(1)} ohm${impedance === 0 ? ' (out of range, using BMI estimate)' : ''}, ` +
+        `pulse ${pulse} bpm, user bytes ${data.subarray(14, 20).toString('hex')}`,
+    );
 
     return { weight, impedance };
   }
