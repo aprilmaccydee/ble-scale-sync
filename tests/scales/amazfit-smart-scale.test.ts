@@ -290,4 +290,15 @@ describe('AmazfitSmartScaleAdapter', () => {
     expect(noStress).not.toHaveProperty('stress');
     expect(adapter.computeMetrics(noStress, defaultProfile())).not.toHaveProperty('stress');
   });
+  it('omits failed stress while retaining completed weight, impedance and pulse', () => {
+    const frame = Buffer.from('fb85ea274b649950557a06466200010000000000', 'hex');
+    for (const value of [0, 39]) {
+      frame[13] = value;
+      const reading = new AmazfitSmartScaleAdapter().parseServiceData('fee0', frame)!;
+      expect(reading).toMatchObject({ impedance: 559, heartRate: 98 });
+      expect(reading.weight).toBeCloseTo(99.06, 2);
+      expect(reading).not.toHaveProperty('stress');
+      expect(adapter.computeMetrics(reading, defaultProfile())).not.toHaveProperty('stress');
+    }
+  });
 });

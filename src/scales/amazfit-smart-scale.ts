@@ -149,7 +149,9 @@ export class AmazfitSmartScaleAdapter implements ScaleAdapterCore, BroadcastSour
     const impedance =
       rawImpedance >= IMPEDANCE_MIN && rawImpedance <= IMPEDANCE_MAX ? rawImpedance : 0;
     const pulse = (flags & 0x0020) !== 0 ? data[12] : 0;
-    const stress = (flags & 0x0040) !== 0 ? data[13] : undefined;
+    // Zepp r5h0 saves stress only on result=1; a failed final stage can
+    // retain the presence flag with a zero/unfinished score.
+    const stress = result === 1 && (flags & 0x0040) !== 0 ? data[13] : undefined;
 
     bleLog.info(
       `Amazfit frame ${hex}: ${weight.toFixed(2)} kg (${isLbs ? 'lb' : 'kg'} mode), ` +

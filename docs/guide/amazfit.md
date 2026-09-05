@@ -110,7 +110,9 @@ After status `ready`, take a fresh barefoot weigh-in and stay on through the
 stress stage. The maintenance wake-up is not exported. Stress follows body
 composition and heart rate, so it lengthens the measurement.
 
-When the completed frame has flag `0x0040`, byte 13 is exported as `stress`.
+When the completed frame has successful result `1` and flag `0x0040`, byte 13
+is exported as `stress`. Failed results can retain this flag with an unfinished
+score, so they omit stress while still exporting valid weight and pulse.
 The first such reading creates a **Stress** sensor for that user. It is a raw,
 unitless score, not a percentage. A flagged zero is preserved; an absent flag
 omits the field and makes an already discovered sensor unknown on that reading.
